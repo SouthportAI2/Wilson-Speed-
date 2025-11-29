@@ -1,38 +1,8 @@
-
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, Search, Play, Pause, FileText, Bot, Cpu, Square, UploadCloud, AlertCircle, RefreshCw, Clock } from 'lucide-react';
+import { Mic, Search, Play, Square, UploadCloud, RefreshCw, Clock, FileText, Bot, Cpu, Wifi, WifiOff } from 'lucide-react';
 import { askAssistant } from '../services/gemini';
+import { getSupabaseClient } from '../services/supabase';
 import { AudioLog } from '../types';
-
-const MOCK_LOGS: AudioLog[] = [
-  {
-    id: '1',
-    timestamp: 'Today, 10:30 AM',
-    customerName: 'Sarah Jenkins',
-    vehicle: '2018 Honda CR-V',
-    duration: '04:12',
-    transcriptPreview: "Customer states distinct rattling noise coming from the passenger side when idling. Suspect heat shield loose or catalytic converter issue. Scheduled for diagnostic...",
-    tags: ['Rattle', 'Honda', 'Heat Shield']
-  },
-  {
-    id: '2',
-    timestamp: 'Today, 11:15 AM',
-    customerName: 'Mike Ross',
-    vehicle: '2020 Ford F-150',
-    duration: '02:45',
-    transcriptPreview: "Oil change completed. Noticed rear brake pads are at 3mm. Recommend replacement before winter. Customer declined for now, noted on invoice...",
-    tags: ['Brakes', 'Maintenance', 'Declined Service']
-  },
-  {
-    id: '3',
-    timestamp: 'Yesterday, 3:45 PM',
-    customerName: 'Shop Floor',
-    vehicle: 'Internal',
-    duration: '15:20',
-    transcriptPreview: "Team meeting regarding the new lift installation. Safety protocols reviewed. Parts for the BMW 3-series are delayed until Tuesday...",
-    tags: ['Meeting', 'Parts Delay', 'BMW']
-  }
-];
 
 const AudioLogger: React.FC = () => {
   // Recording State
@@ -46,8 +16,9 @@ const AudioLogger: React.FC = () => {
   
   // Data State
   const [searchQuery, setSearchQuery] = useState('');
-  const [logs, setLogs] = useState<AudioLog[]>(MOCK_LOGS);
+  const [logs, setLogs] = useState<AudioLog[]>([]);
   const [selectedLog, setSelectedLog] = useState<AudioLog | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
   
   // Assistant State
   const [assistantQuery, setAssistantQuery] = useState('');
@@ -57,10 +28,10 @@ const AudioLogger: React.FC = () => {
   const chunks = useRef<BlobPart[]>([]);
   const timerRef = useRef<number | null>(null);
   const segmentTimerRef = useRef<number | null>(null);
-  const isContinuousRef = useRef(false); // Ref for access inside closures
-  const isRecordingRef = useRef(false); // Ref to track actual intent vs auto-restart
+  const isContinuousRef = useRef(false);
+  const isRecordingRef = useRef(false);
 
-  // Load settings on mount
+  // Load settings and fetch data
   useEffect(() => {
     const storedConfig = localStorage.getItem('southport_config');
     if (storedConfig) {
@@ -69,6 +40,7 @@ const AudioLogger: React.FC = () => {
         setSegmentDuration(parseInt(config.audioSegmentDuration, 10));
       }
     }
+    fetchLogs();
   }, []);
 
   // Sync ref with state
@@ -76,21 +48,40 @@ const AudioLogger: React.FC = () => {
     isContinuousRef.current = isContinuous;
   }, [isContinuous]);
 
-  // Search Logic
-  useEffect(() => {
-    if (!searchQuery) {
-      setLogs(MOCK_LOGS);
-    } else {
-      const lower = searchQuery.toLowerCase();
-      const filtered = MOCK_LOGS.filter(log => 
-        log.customerName.toLowerCase().includes(lower) ||
-        log.vehicle.toLowerCase().includes(lower) ||
-        log.transcriptPreview.toLowerCase().includes(lower) ||
-        log.tags.some(t => t.toLowerCase().includes(lower))
-      );
-      setLogs(filtered);
+  const fetchLogs = async () => {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      // Keep using empty state if no credentials, will show empty list
+      return;
     }
-  }, [searchQuery]);
+
+    try {
+      const { data, error } = await supabase
+        .from('audio_logs')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      if (data) {
+        setIsConnected(true);
+        const formattedLogs: AudioLog[] = data.map(item => ({
+          id: item.id,
+          timestamp: new Date(item.created_at).toLocaleString(),
+          customerName: item.customer_name || 'Unknown',
+          vehicle: item.vehicle || 'General',
+          duration: 'Recorded', // Duration isn't stored in DB yet, placeholder
+          transcriptPreview: item.transcript || item.summary || 'Processing...',
+          tags: item.tags || [],
+          audioUrl: item.audio_url
+        }));
+        setLogs(formattedLogs);
+      }
+    } catch (err) {
+      console.error("Error fetching logs:", err);
+      setIsConnected(false);
+    }
+  };
 
   const startRecording = async () => {
     try {
@@ -170,7 +161,6 @@ const AudioLogger: React.FC = () => {
     
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
       mediaRecorder.stop();
-      // Stream tracks are stopped in onstop when !isRecordingRef.current
     }
     
     if (timerRef.current) {
@@ -194,45 +184,38 @@ const AudioLogger: React.FC = () => {
     if (webhookUrl) {
       try {
         const formData = new FormData();
-        formData.append('file', audioBlob, `recording_${Date.now()}.webm`);
+        // CHANGED: field name is 'data' to match n8n default binary expectation
+        formData.append('data', audioBlob, `recording_${Date.now()}.webm`);
         formData.append('timestamp', new Date().toISOString());
         
-        // Fire and forget upload to n8n (don't await if in continuous mode to keep UI snappy)
+        // Fire and forget upload to n8n
         fetch(webhookUrl, { method: 'POST', body: formData })
           .then(res => res.json())
           .catch(err => console.error("Webhook error", err));
 
-        // Simulate a new log entry immediately for feedback
+        // Add a temporary optimistic log
         const newLog: AudioLog = {
-          id: Date.now().toString(),
+          id: 'temp-' + Date.now(),
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          customerName: 'Auto-Log Segment',
-          vehicle: 'Shop Floor',
+          customerName: 'Processing...',
+          vehicle: 'Upload Sent',
           duration: formatTime(recordingTime > 0 ? recordingTime : (segmentDuration * 60)),
-          transcriptPreview: "Audio segment uploaded to n8n. Processing transcription...",
-          tags: ['Auto-Segment', 'Processing'],
+          transcriptPreview: "Audio sent to AI. Refresh shortly to see analysis.",
+          tags: ['Uploading'],
           audioUrl: URL.createObjectURL(audioBlob)
         };
         
         setLogs(prev => [newLog, ...prev]);
         
+        // Poll for updates after 10 seconds
+        setTimeout(fetchLogs, 10000);
+        
       } catch (error) {
         console.error("Upload setup failed", error);
+        alert("Failed to upload audio to n8n. Check webhook URL.");
       }
     } else {
-      // Fallback Demo Mode
-      await new Promise(resolve => setTimeout(resolve, 500));
-      const newLog: AudioLog = {
-        id: Date.now().toString(),
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        customerName: 'Demo Segment',
-        vehicle: 'Office Mic',
-        duration: formatTime(recordingTime > 0 ? recordingTime : (segmentDuration * 60)),
-        transcriptPreview: "(Demo) Segment saved. Configure n8n webhook to transcribe real-time.",
-        tags: ['Local Demo', 'Continuous'],
-        audioUrl: URL.createObjectURL(audioBlob)
-      };
-      setLogs(prev => [newLog, ...prev]);
+      alert("Please configure n8n Webhook in Settings first.");
     }
     
     setIsProcessing(false);
@@ -256,18 +239,33 @@ const AudioLogger: React.FC = () => {
     setIsThinking(false);
   };
 
+  const filteredLogs = logs.filter(log => 
+    !searchQuery || 
+    log.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    log.vehicle.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    log.transcriptPreview.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-200px)]">
       {/* Left Column: Search & List */}
       <div className="lg:col-span-2 flex flex-col gap-4">
         {/* Controls */}
         <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 space-y-4">
+          <div className="flex justify-between items-center text-xs text-slate-400 mb-2">
+            <span className="flex items-center gap-1">
+              {isConnected ? <Wifi size={12} className="text-green-500" /> : <WifiOff size={12} className="text-red-500" />}
+              {isConnected ? "Database Connected" : "Offline Mode (Check Settings)"}
+            </span>
+            <button onClick={fetchLogs} className="hover:text-white flex items-center gap-1"><RefreshCw size={12}/> Refresh Logs</button>
+          </div>
+          
           <div className="flex flex-col md:flex-row gap-4 items-center">
             <div className="relative flex-1 w-full">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
               <input 
                 type="text" 
-                placeholder="Search by vehicle, customer, or keyword..." 
+                placeholder="Search logs..." 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-10 pr-4 py-3 text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
@@ -337,36 +335,41 @@ const AudioLogger: React.FC = () => {
 
         {/* List */}
         <div className="flex-1 bg-slate-800/50 rounded-xl border border-slate-700 overflow-y-auto p-4 space-y-3">
-          {logs.map(log => (
-            <div 
-              key={log.id}
-              onClick={() => setSelectedLog(log)}
-              className={`p-4 rounded-lg border cursor-pointer transition-all ${
-                selectedLog?.id === log.id 
-                  ? 'bg-blue-600/10 border-blue-500' 
-                  : 'bg-slate-800 border-slate-700 hover:border-slate-600'
-              }`}
-            >
-              <div className="flex justify-between items-start mb-2">
-                <div>
-                   <h4 className="font-bold text-white">{log.customerName}</h4>
-                   <span className="text-xs text-blue-400 bg-blue-400/10 px-2 py-0.5 rounded mr-2">{log.vehicle}</span>
-                   <span className="text-xs text-slate-500">{log.timestamp}</span>
+          {filteredLogs.length > 0 ? (
+            filteredLogs.map(log => (
+              <div 
+                key={log.id}
+                onClick={() => setSelectedLog(log)}
+                className={`p-4 rounded-lg border cursor-pointer transition-all ${
+                  selectedLog?.id === log.id 
+                    ? 'bg-blue-600/10 border-blue-500' 
+                    : 'bg-slate-800 border-slate-700 hover:border-slate-600'
+                }`}
+              >
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                     <h4 className="font-bold text-white">{log.customerName}</h4>
+                     <span className="text-xs text-blue-400 bg-blue-400/10 px-2 py-0.5 rounded mr-2">{log.vehicle}</span>
+                     <span className="text-xs text-slate-500">{log.timestamp}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-400 text-sm">
+                    {log.duration}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 text-slate-400 text-sm">
-                  <Play size={14} /> {log.duration}
+                <p className="text-slate-400 text-sm line-clamp-2">{log.transcriptPreview}</p>
+                <div className="flex gap-2 mt-2">
+                  {log.tags && log.tags.map(tag => (
+                    <span key={tag} className="text-[10px] bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full">#{tag}</span>
+                  ))}
                 </div>
               </div>
-              <p className="text-slate-400 text-sm line-clamp-2">{log.transcriptPreview}</p>
-              <div className="flex gap-2 mt-2">
-                {log.tags.map(tag => (
-                  <span key={tag} className="text-[10px] bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full">#{tag}</span>
-                ))}
-              </div>
+            ))
+          ) : (
+            <div className="text-center text-slate-500 py-10 flex flex-col items-center">
+              <Mic size={32} className="mb-2 opacity-20" />
+              <p>No audio logs found.</p>
+              {!isConnected && <p className="text-xs text-red-400 mt-2">Check Database Connection in Settings</p>}
             </div>
-          ))}
-          {logs.length === 0 && (
-            <div className="text-center text-slate-500 py-10">No logs found matching your search.</div>
           )}
         </div>
       </div>
@@ -378,7 +381,7 @@ const AudioLogger: React.FC = () => {
              <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-700">
                <div>
                  <h3 className="text-xl font-bold text-white">Transcript Details</h3>
-                 <p className="text-slate-400 text-sm">{selectedLog.id} • {selectedLog.timestamp}</p>
+                 <p className="text-slate-400 text-sm">{selectedLog.timestamp}</p>
                </div>
                {selectedLog.audioUrl && (
                   <button 
@@ -400,9 +403,8 @@ const AudioLogger: React.FC = () => {
                
                <h4 className="font-semibold text-white mb-2 flex items-center gap-2"><Cpu size={16} /> AI Analysis</h4>
                <ul className="list-disc list-inside text-slate-400 text-sm space-y-1 mb-6">
-                 <li>Detected Issue: <span className="text-white">Reviewing...</span></li>
-                 <li>Sentiment: <span className="text-white">Neutral</span></li>
-                 <li>Action Item: <span className="text-white">Log only</span></li>
+                 <li>Customer: <span className="text-white">{selectedLog.customerName}</span></li>
+                 <li>Vehicle: <span className="text-white">{selectedLog.vehicle}</span></li>
                </ul>
              </div>
           </div>
