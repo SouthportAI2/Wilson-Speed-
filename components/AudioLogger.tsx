@@ -183,14 +183,25 @@ const AudioLogger: React.FC = () => {
 
     if (webhookUrl) {
       try {
+        console.log("Uploading audio blob size:", audioBlob.size);
+        
+        if (audioBlob.size === 0) {
+             console.warn("Audio blob was empty, skipping upload");
+             setIsProcessing(false);
+             return;
+        }
+
         const formData = new FormData();
-        // CHANGED: field name is 'data' to match n8n default binary expectation
-        formData.append('data', audioBlob, `recording_${Date.now()}.webm`);
+        // FIELD NAME IS 'file' - Ensure n8n Webhook or Whisper node looks for 'file'
+        formData.append('file', audioBlob, `recording_${Date.now()}.webm`);
         formData.append('timestamp', new Date().toISOString());
         
         // Fire and forget upload to n8n
         fetch(webhookUrl, { method: 'POST', body: formData })
-          .then(res => res.json())
+          .then(async (res) => {
+             const text = await res.text();
+             console.log("Webhook response:", text);
+          })
           .catch(err => console.error("Webhook error", err));
 
         // Add a temporary optimistic log
