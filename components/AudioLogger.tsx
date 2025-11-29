@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, Search, Play, Square, UploadCloud, RefreshCw, Clock, FileText, Bot, Cpu, Wifi, WifiOff } from 'lucide-react';
+import { Mic, Search, Play, Square, UploadCloud, RefreshCw, Clock, FileText, Bot, Cpu, Wifi, WifiOff, AlertTriangle } from 'lucide-react';
 import { askAssistant } from '../services/gemini';
 import { getSupabaseClient } from '../services/supabase';
 import { AudioLog } from '../types';
@@ -19,6 +19,7 @@ const AudioLogger: React.FC = () => {
   const [logs, setLogs] = useState<AudioLog[]>([]);
   const [selectedLog, setSelectedLog] = useState<AudioLog | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [dbError, setDbError] = useState<string | null>(null);
   
   // Assistant State
   const [assistantQuery, setAssistantQuery] = useState('');
@@ -49,9 +50,10 @@ const AudioLogger: React.FC = () => {
   }, [isContinuous]);
 
   const fetchLogs = async () => {
+    setDbError(null);
     const supabase = getSupabaseClient();
     if (!supabase) {
-      // Keep using empty state if no credentials, will show empty list
+      setDbError("Missing API Keys in Settings");
       return;
     }
 
@@ -77,9 +79,10 @@ const AudioLogger: React.FC = () => {
         }));
         setLogs(formattedLogs);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error fetching logs:", err);
       setIsConnected(false);
+      setDbError(err.message || "Failed to connect to Supabase");
     }
   };
 
@@ -266,10 +269,17 @@ const AudioLogger: React.FC = () => {
           <div className="flex justify-between items-center text-xs text-slate-400 mb-2">
             <span className="flex items-center gap-1">
               {isConnected ? <Wifi size={12} className="text-green-500" /> : <WifiOff size={12} className="text-red-500" />}
-              {isConnected ? "Database Connected" : "Offline Mode (Check Settings)"}
+              {isConnected ? "Database Connected" : "Offline / Connecting..."}
             </span>
             <button onClick={fetchLogs} className="hover:text-white flex items-center gap-1"><RefreshCw size={12}/> Refresh Logs</button>
           </div>
+          
+          {dbError && (
+             <div className="bg-red-500/10 border border-red-500/30 text-red-400 p-3 rounded-lg text-xs flex items-center gap-2">
+               <AlertTriangle size={14} />
+               <span><strong>Connection Error:</strong> {dbError}</span>
+             </div>
+          )}
           
           <div className="flex flex-col md:flex-row gap-4 items-center">
             <div className="relative flex-1 w-full">
