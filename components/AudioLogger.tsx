@@ -10,10 +10,9 @@ const AudioLogger: React.FC = () => {
   const [recordingTime, setRecordingTime] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isContinuous, setIsContinuous] = useState(false);
-  const [segmentDuration, setSegmentDuration] = useState(5); // Default 5 minutes
+  const [segmentDuration, setSegmentDuration] = useState(5);
   const [nextSplitIn, setNextSplitIn] = useState(0);
   
-  // Data State
   const [searchQuery, setSearchQuery] = useState('');
   const [logs, setLogs] = useState<AudioLog[]>([]);
   const [selectedLog, setSelectedLog] = useState<AudioLog | null>(null);
@@ -22,7 +21,6 @@ const AudioLogger: React.FC = () => {
   const [debugInfo, setDebugInfo] = useState<string>('');
   const [serverLog, setServerLog] = useState<string>('Ready for upload...');
   
-  // Assistant State
   const [assistantQuery, setAssistantQuery] = useState('');
   const [assistantResponse, setAssistantResponse] = useState('');
   const [isThinking, setIsThinking] = useState(false);
@@ -37,17 +35,13 @@ const AudioLogger: React.FC = () => {
   const isRecordingRef = useRef(false);
   const isMountedRef = useRef(true);
 
-  // Sync state to refs for event listeners
   useEffect(() => {
     isContinuousRef.current = isContinuous;
   }, [isContinuous]);
 
-  // --- LIFECYCLE ---
-  
   useEffect(() => {
     isMountedRef.current = true;
     
-    // Load config
     const storedConfig = localStorage.getItem('southport_config');
     if (storedConfig) {
       const config = JSON.parse(storedConfig);
@@ -56,7 +50,6 @@ const AudioLogger: React.FC = () => {
       }
     }
 
-    // Initial Fetch
     fetchLogs();
 
     return () => {
@@ -64,8 +57,6 @@ const AudioLogger: React.FC = () => {
       cleanupRecordingResources();
     };
   }, []);
-
-  // --- METHODS ---
 
   const cleanupRecordingResources = () => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -75,7 +66,6 @@ const AudioLogger: React.FC = () => {
       mediaRecorderRef.current.stop();
     }
     
-    // Important: Stop all tracks to turn off microphone light
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
@@ -110,9 +100,10 @@ const AudioLogger: React.FC = () => {
 
       if (isMountedRef.current) {
         setIsConnected(true);
-        setDebugInfo(`Sync Success. Rows: ${data?.length || 0}`);
         
         if (data) {
+          console.log(`📊 Fetched ${data.length} rows from Supabase`);
+          
           const formattedLogs: AudioLog[] = data.map(item => ({
             id: item.id,
             timestamp: new Date(item.created_at).toLocaleString(),
@@ -125,19 +116,30 @@ const AudioLogger: React.FC = () => {
           }));
           
           setLogs(prev => {
-            // CRITICAL FIX: Merge temp logs with real data
-            // Keep temp logs that are less than 35 seconds old (enough time for AI to finish)
             const now = Date.now();
-            const tempLogs = prev.filter(log => {
+            
+            // Filter out expired temp logs
+            const recentTempLogs = prev.filter(log => {
               if (!log.id.startsWith('temp-')) return false;
               const tempIdTimestamp = parseInt(log.id.replace('temp-', ''));
-              const age = now - tempIdTimestamp;
-              return age < 35000; // Keep recent temp logs for 35s
+              const ageSeconds = (now - tempIdTimestamp) / 1000;
+              
+              if (ageSeconds >= 35) {
+                console.log(`🗑️ Removing expired temp log (age: ${ageSeconds.toFixed(1)}s)`);
+                return false;
+              }
+              return true;
             });
             
-            // Combine recent temp logs with real data from DB
-            // We put temp logs first so the user sees "Uploading..." at the top
-            return [...tempLogs, ...formattedLogs];
+            console.log(`✅ Merged: ${formattedLogs.length} real + ${recentTempLogs.length} temp = ${formattedLogs.length + recentTempLogs.length} total`);
+            
+            // Put REAL LOGS FIRST (most recent at top)
+            // Then temp logs below (will auto-expire)
+            const merged = [...formattedLogs, ...recentTempLogs];
+            
+            setDebugInfo(`Sync Success. Rows: ${merged.length} (${formattedLogs.length} real, ${recentTempLogs.length} temp)`);
+            
+            return merged;
           });
         }
       }
@@ -153,7 +155,6 @@ const AudioLogger: React.FC = () => {
   }, []);
 
   const startNewSegment = async () => {
-    // Stop any existing recording properly first
     cleanupRecordingResources();
 
     try {
@@ -172,17 +173,15 @@ const AudioLogger: React.FC = () => {
 
       recorder.onstop = async () => {
         const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-        chunksRef.current = []; // Clear
+        chunksRef.current = [];
         
         await handleUpload(blob);
 
-        // Continuous Logic: If we are still "Recording" in state, start a new segment
         if (isMountedRef.current && isRecordingRef.current && isContinuousRef.current) {
-          console.log("Starting next continuous segment...");
+          console.log("🔄 Starting next continuous segment...");
           setRecordingTime(0);
-          startNewSegment(); // Recursion for next segment
+          startNewSegment();
         } else {
-          // Fully stop
           if (streamRef.current) {
             streamRef.current.getTracks().forEach(track => track.stop());
           }
@@ -228,7 +227,6 @@ const AudioLogger: React.FC = () => {
         if (!isMountedRef.current) return;
         setNextSplitIn(prev => {
           if (prev <= 1) {
-            // Trigger split
             if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
               mediaRecorderRef.current.stop();
             }
@@ -241,7 +239,7 @@ const AudioLogger: React.FC = () => {
   };
 
   const stopRecording = () => {
-    isRecordingRef.current = false; // Prevent restart
+    isRecordingRef.current = false;
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
       mediaRecorderRef.current.stop();
     } else {
@@ -270,7 +268,6 @@ const AudioLogger: React.FC = () => {
       return;
     }
 
-    // Optimistic Update - Temporary Log
     const tempId = 'temp-' + Date.now();
     const tempLog: AudioLog = {
       id: tempId,
@@ -282,13 +279,13 @@ const AudioLogger: React.FC = () => {
       tags: ['Upload'],
       audioUrl: ''
     };
+    
+    console.log(`📤 Creating temp log: ${tempId}`);
     setLogs(prev => [tempLog, ...prev]);
 
     try {
-      setServerLog(`Uploading ${audioBlob.size} bytes...`);
+      setServerLog(`Uploading ${(audioBlob.size / 1024).toFixed(1)} KB...`);
       const formData = new FormData();
-      
-      // Use 'file' as it is the standard for n8n webhook nodes
       formData.append('file', audioBlob, 'recording.webm'); 
 
       const response = await fetch(webhookUrl, {
@@ -305,13 +302,10 @@ const AudioLogger: React.FC = () => {
 
       setServerLog(`Upload Success! AI is analyzing...`);
       
-      // RETRY POLLING STRATEGY
-      // AI takes time (10-30s), so we check multiple times
-      // Temp logs older than 35 seconds will auto-expire in fetchLogs
       const poll = (delay: number, attempt: number) => {
         setTimeout(() => {
           if (isMountedRef.current) {
-            console.log(`Polling DB (attempt ${attempt}) at ${delay}ms...`);
+            console.log(`🔍 Poll #${attempt} at ${delay}ms...`);
             fetchLogs();
             if (attempt === 4) {
               setServerLog("Data synced from database");
@@ -320,15 +314,14 @@ const AudioLogger: React.FC = () => {
         }, delay);
       };
 
-      poll(5000, 1);   // 5s check
-      poll(10000, 2);  // 10s check  
-      poll(20000, 3);  // 20s check
-      poll(30000, 4);  // 30s final check
+      poll(5000, 1);
+      poll(10000, 2);
+      poll(20000, 3);
+      poll(30000, 4);
 
     } catch (error: any) {
       console.error("Upload Error:", error);
       setServerLog(`Upload Failed: ${error.message}`);
-      // Remove temp log on error
       setLogs(prev => prev.filter(l => l.id !== tempId));
     } finally {
       if (isMountedRef.current) setIsProcessing(false);
@@ -370,11 +363,8 @@ const AudioLogger: React.FC = () => {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-200px)]">
-      {/* Left Column: List & Controls */}
       <div className="lg:col-span-2 flex flex-col gap-4">
-        {/* Control Panel */}
         <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 space-y-4 shadow-sm">
-          {/* Status Bar */}
           <div className="flex justify-between items-center text-xs text-slate-400">
             <div className="flex items-center gap-3">
               <span className={`flex items-center gap-1.5 px-2 py-1 rounded ${isConnected ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
@@ -388,13 +378,11 @@ const AudioLogger: React.FC = () => {
             </button>
           </div>
 
-          {/* Server Log Terminal */}
           <div className="bg-slate-950 border border-slate-800 p-2.5 rounded-lg font-mono text-[11px] text-green-400 flex gap-3 items-center overflow-hidden">
              <Terminal size={12} className="shrink-0 text-slate-500" />
              <span className="truncate">{serverLog}</span>
           </div>
 
-          {/* Error Banner */}
           {dbError && (
              <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-lg text-xs flex items-center gap-2">
                <AlertTriangle size={14} className="shrink-0" />
@@ -402,7 +390,6 @@ const AudioLogger: React.FC = () => {
              </div>
           )}
           
-          {/* Main Controls */}
           <div className="flex flex-col md:flex-row gap-4 items-center">
             <div className="relative flex-1 w-full">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
@@ -448,7 +435,6 @@ const AudioLogger: React.FC = () => {
             )}
           </div>
           
-          {/* Continuous Mode Toggle */}
           <div className="flex items-center justify-between text-sm pt-2">
              <div 
                onClick={() => !isRecording && setIsContinuous(!isContinuous)}
@@ -471,7 +457,6 @@ const AudioLogger: React.FC = () => {
           </div>
         </div>
 
-        {/* Logs List */}
         <div className="flex-1 bg-slate-800/50 rounded-xl border border-slate-700 overflow-y-auto p-4 space-y-3 custom-scrollbar">
           {filteredLogs.length > 0 ? (
             filteredLogs.map(log => (
@@ -517,7 +502,6 @@ const AudioLogger: React.FC = () => {
         </div>
       </div>
 
-      {/* Right Column: Assistant & Details */}
       <div className="bg-slate-800 rounded-xl border border-slate-700 flex flex-col overflow-hidden shadow-xl">
         {selectedLog ? (
           <div className="flex-1 p-6 overflow-y-auto">
@@ -564,7 +548,6 @@ const AudioLogger: React.FC = () => {
           </div>
         )}
 
-        {/* Voice Assistant Chat */}
         <div className="p-4 bg-slate-900/80 border-t border-slate-700 backdrop-blur-sm">
           {assistantResponse && (
             <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg text-sm text-blue-200 animate-fade-in flex gap-3 shadow-inner">
@@ -595,3 +578,4 @@ const AudioLogger: React.FC = () => {
 };
 
 export default AudioLogger;
+
