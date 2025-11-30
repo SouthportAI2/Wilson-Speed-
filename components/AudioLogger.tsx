@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Mic, Search, Play, Square, UploadCloud, RefreshCw, Clock, FileText, Bot, Cpu, Wifi, WifiOff, AlertTriangle, Database, Terminal } from 'lucide-react';
 import { askAssistant } from '../services/gemini';
@@ -42,30 +41,6 @@ const AudioLogger: React.FC = () => {
   useEffect(() => {
     isContinuousRef.current = isContinuous;
   }, [isContinuous]);
-
-  // --- LIFECYCLE ---
-  
-  // 1. Mount/Unmount Cleanup
-  useEffect(() => {
-    isMountedRef.current = true;
-    
-    // Load config
-    const storedConfig = localStorage.getItem('southport_config');
-    if (storedConfig) {
-      const config = JSON.parse(storedConfig);
-      if (config.audioSegmentDuration) {
-        setSegmentDuration(parseInt(config.audioSegmentDuration, 10));
-      }
-    }
-
-    // Initial Fetch
-    fetchLogs();
-
-    return () => {
-      isMountedRef.current = false;
-      cleanupRecordingResources();
-    };
-  }, []);
 
   // --- METHODS ---
 
@@ -125,7 +100,13 @@ const AudioLogger: React.FC = () => {
             tags: item.tags || [],
             audioUrl: item.audio_url
           }));
-          setLogs(formattedLogs);
+          
+          // Merge real logs, removing any temps that might still be there
+          setLogs(prev => {
+            const temps = prev.filter(l => l.id.startsWith('temp-'));
+            // If real logs have arrived, we can likely drop the temps, or keep them if they are very recent
+            return formattedLogs; 
+          });
         }
       }
     } catch (err: any) {
@@ -138,6 +119,30 @@ const AudioLogger: React.FC = () => {
       }
     }
   }, []);
+
+  // --- LIFECYCLE ---
+  
+  useEffect(() => {
+    isMountedRef.current = true;
+    
+    // Load config
+    const storedConfig = localStorage.getItem('southport_config');
+    if (storedConfig) {
+      const config = JSON.parse(storedConfig);
+      if (config.audioSegmentDuration) {
+        setSegmentDuration(parseInt(config.audioSegmentDuration, 10));
+      }
+    }
+
+    // Initial Fetch
+    fetchLogs();
+
+    return () => {
+      isMountedRef.current = false;
+      cleanupRecordingResources();
+      // Revoke any object URLs if we used them
+    };
+  }, [fetchLogs]);
 
   const startNewSegment = async () => {
     // Stop any existing recording properly first
@@ -274,11 +279,9 @@ const AudioLogger: React.FC = () => {
     try {
       setServerLog(`Uploading ${audioBlob.size} bytes...`);
       const formData = new FormData();
-      // Use 'file' as the key - Standard for n8n binary nodes
-      formData.append('file', audioBlob, 'recording.webm');
       
-      // Note: We are deliberately NOT sending extra fields like 'timestamp' 
-      // to ensure n8n treats this strictly as a file upload.
+      // Changed to 'file' based on standard n8n behavior
+      formData.append('file', audioBlob, 'recording.mp3'); 
 
       const response = await fetch(webhookUrl, {
         method: 'POST',
@@ -292,12 +295,12 @@ const AudioLogger: React.FC = () => {
         throw new Error(`Server responded ${response.status}: ${text}`);
       }
 
-      setServerLog(`Upload Success! AI Processing...`);
+      setServerLog(`Upload Success! Waiting for AI...`);
       
       // Wait for AI to finish processing then fetch real data
-      setTimeout(() => {
-        if (isMountedRef.current) fetchLogs();
-      }, 8000);
+      // Polling a few times to catch the result
+      setTimeout(() => { if (isMountedRef.current) fetchLogs(); }, 5000);
+      setTimeout(() => { if (isMountedRef.current) fetchLogs(); }, 10000);
 
     } catch (error: any) {
       console.error("Upload Error:", error);
@@ -569,4 +572,3 @@ const AudioLogger: React.FC = () => {
 };
 
 export default AudioLogger;
-
