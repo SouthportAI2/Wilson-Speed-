@@ -125,10 +125,19 @@ const AudioLogger: React.FC = () => {
           }));
           
           setLogs(prev => {
-            // Keep existing logs but replace with new fetch
-            // This ensures if we have a real log for a temp ID, the temp ID is gone
-            // Note: Since we fetch all sorted by date, the new log will be at the top
-            return formattedLogs; 
+            // CRITICAL FIX: Merge temp logs with real data
+            // Keep temp logs that are less than 35 seconds old (enough time for AI to finish)
+            const now = Date.now();
+            const tempLogs = prev.filter(log => {
+              if (!log.id.startsWith('temp-')) return false;
+              const tempIdTimestamp = parseInt(log.id.replace('temp-', ''));
+              const age = now - tempIdTimestamp;
+              return age < 35000; // Keep recent temp logs for 35s
+            });
+            
+            // Combine recent temp logs with real data from DB
+            // We put temp logs first so the user sees "Uploading..." at the top
+            return [...tempLogs, ...formattedLogs];
           });
         }
       }
@@ -280,7 +289,7 @@ const AudioLogger: React.FC = () => {
       const formData = new FormData();
       
       // Use 'file' as it is the standard for n8n webhook nodes
-      formData.append('file', audioBlob, 'recording.mp3'); 
+      formData.append('file', audioBlob, 'recording.webm'); 
 
       const response = await fetch(webhookUrl, {
         method: 'POST',
@@ -297,20 +306,24 @@ const AudioLogger: React.FC = () => {
       setServerLog(`Upload Success! AI is analyzing...`);
       
       // RETRY POLLING STRATEGY
-      // AI takes time (10-20s), so we check multiple times
-      const poll = (delay: number) => {
+      // AI takes time (10-30s), so we check multiple times
+      // Temp logs older than 35 seconds will auto-expire in fetchLogs
+      const poll = (delay: number, attempt: number) => {
         setTimeout(() => {
           if (isMountedRef.current) {
-            console.log(`Polling DB at ${delay}ms...`);
+            console.log(`Polling DB (attempt ${attempt}) at ${delay}ms...`);
             fetchLogs();
+            if (attempt === 4) {
+              setServerLog("Data synced from database");
+            }
           }
         }, delay);
       };
 
-      poll(5000);  // 5s check
-      poll(10000); // 10s check
-      poll(15000); // 15s check
-      poll(30000); // 30s final check
+      poll(5000, 1);   // 5s check
+      poll(10000, 2);  // 10s check  
+      poll(20000, 3);  // 20s check
+      poll(30000, 4);  // 30s final check
 
     } catch (error: any) {
       console.error("Upload Error:", error);
@@ -473,7 +486,7 @@ const AudioLogger: React.FC = () => {
               >
                 <div className="flex justify-between items-start mb-2">
                   <div>
-                     <h4 className={`font-bold ${log.customerName === 'Unknown' ? 'text-slate-400' : 'text-white'}`}>
+                     <h4 className={`font-bold ${log.customerName === 'Unknown' || log.customerName === 'Uploading...' ? 'text-slate-400' : 'text-white'}`}>
                        {log.customerName}
                      </h4>
                      <div className="flex items-center gap-2 mt-1">
