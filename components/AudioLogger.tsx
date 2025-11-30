@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, Search, Play, Square, UploadCloud, RefreshCw, Clock, FileText, Bot, Cpu, Wifi, WifiOff, AlertTriangle, Database } from 'lucide-react';
+import { Mic, Search, Play, Square, UploadCloud, RefreshCw, Clock, FileText, Bot, Cpu, Wifi, WifiOff, AlertTriangle, Database, Terminal } from 'lucide-react';
 import { askAssistant } from '../services/gemini';
 import { getSupabaseClient } from '../services/supabase';
 import { AudioLog } from '../types';
@@ -22,6 +22,7 @@ const AudioLogger: React.FC = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [dbError, setDbError] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<string>('');
+  const [serverLog, setServerLog] = useState<string>('Ready for upload...');
   
   // Assistant State
   const [assistantQuery, setAssistantQuery] = useState('');
@@ -53,7 +54,7 @@ const AudioLogger: React.FC = () => {
 
   const fetchLogs = async () => {
     setDbError(null);
-    setDebugInfo('Connecting...');
+    setDebugInfo('Connecting to DB...');
     const supabase = getSupabaseClient();
     
     if (!supabase) {
@@ -74,7 +75,7 @@ const AudioLogger: React.FC = () => {
         throw error;
       }
 
-      setDebugInfo(`Success. Found ${data?.length || 0} logs.`);
+      setDebugInfo(`Success. Rows: ${data?.length || 0}`);
 
       if (data) {
         setIsConnected(true);
@@ -95,7 +96,7 @@ const AudioLogger: React.FC = () => {
       setIsConnected(false);
       const msg = err.message || "Failed to connect to Supabase";
       setDbError(msg);
-      setDebugInfo(`Error: ${msg}`);
+      setDebugInfo(`DB Error: ${msg}`);
     }
   };
 
@@ -131,6 +132,7 @@ const AudioLogger: React.FC = () => {
       setMediaRecorder(recorder);
       setIsRecording(true);
       isRecordingRef.current = true;
+      setServerLog("Recording in progress...");
       
       // Main Timer
       setRecordingTime(0);
@@ -191,6 +193,7 @@ const AudioLogger: React.FC = () => {
 
   const handleUpload = async (audioBlob: Blob) => {
     setIsProcessing(true);
+    setServerLog("Preparing upload...");
     
     // Check for configured Webhook
     const storedConfig = localStorage.getItem('southport_config');
@@ -200,9 +203,12 @@ const AudioLogger: React.FC = () => {
     if (webhookUrl) {
       try {
         console.log("Uploading audio blob size:", audioBlob.size);
+        setServerLog(`Uploading ${audioBlob.size} bytes to n8n...`);
         
         if (audioBlob.size === 0) {
-             console.warn("Audio blob was empty, skipping upload");
+             const msg = "Audio blob was empty, skipping upload";
+             console.warn(msg);
+             setServerLog(msg);
              setIsProcessing(false);
              return;
         }
@@ -213,12 +219,11 @@ const AudioLogger: React.FC = () => {
         formData.append('timestamp', new Date().toISOString());
         
         // Fire and forget upload to n8n
-        fetch(webhookUrl, { method: 'POST', body: formData })
-          .then(async (res) => {
-             const text = await res.text();
-             console.log("Webhook response:", text);
-          })
-          .catch(err => console.error("Webhook error", err));
+        const response = await fetch(webhookUrl, { method: 'POST', body: formData });
+        const text = await response.text();
+        
+        console.log("Webhook response:", text);
+        setServerLog(`n8n Response: ${text.substring(0, 100)}${text.length > 100 ? '...' : ''}`);
 
         // Add a temporary optimistic log
         const newLog: AudioLog = {
@@ -237,12 +242,15 @@ const AudioLogger: React.FC = () => {
         // Poll for updates after 10 seconds
         setTimeout(fetchLogs, 10000);
         
-      } catch (error) {
+      } catch (error: any) {
         console.error("Upload setup failed", error);
+        setServerLog(`Upload Error: ${error.message}`);
         alert("Failed to upload audio to n8n. Check webhook URL.");
       }
     } else {
-      alert("Please configure n8n Webhook in Settings first.");
+      const msg = "Please configure n8n Webhook in Settings first.";
+      setServerLog(msg);
+      alert(msg);
     }
     
     setIsProcessing(false);
@@ -284,8 +292,14 @@ const AudioLogger: React.FC = () => {
               {isConnected ? <Wifi size={12} className="text-green-500" /> : <WifiOff size={12} className="text-red-500" />}
               {isConnected ? "Database Connected" : "Offline / Connecting..."}
             </span>
-            <span className="font-mono text-xs opacity-50">DB Status: {debugInfo}</span>
+            <span className="font-mono text-xs opacity-50">{debugInfo}</span>
             <button onClick={fetchLogs} className="hover:text-white flex items-center gap-1"><RefreshCw size={12}/> Refresh Logs</button>
+          </div>
+          
+          {/* Server Response Panel */}
+          <div className="bg-black/30 border border-slate-700 p-2 rounded font-mono text-[10px] text-green-400 flex gap-2 items-center overflow-hidden whitespace-nowrap">
+             <Terminal size={12} className="shrink-0" />
+             <span className="truncate">{serverLog}</span>
           </div>
           
           {dbError && (
@@ -482,4 +496,3 @@ const AudioLogger: React.FC = () => {
 };
 
 export default AudioLogger;
-
