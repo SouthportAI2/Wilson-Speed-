@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, Search, Play, Square, UploadCloud, RefreshCw, Clock, FileText, Bot, Cpu, Wifi, WifiOff, AlertTriangle } from 'lucide-react';
+import { Mic, Search, Play, Square, UploadCloud, RefreshCw, Clock, FileText, Bot, Cpu, Wifi, WifiOff, AlertTriangle, Database } from 'lucide-react';
 import { askAssistant } from '../services/gemini';
 import { getSupabaseClient } from '../services/supabase';
 import { AudioLog } from '../types';
@@ -20,6 +21,7 @@ const AudioLogger: React.FC = () => {
   const [selectedLog, setSelectedLog] = useState<AudioLog | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [dbError, setDbError] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<string>('');
   
   // Assistant State
   const [assistantQuery, setAssistantQuery] = useState('');
@@ -51,19 +53,28 @@ const AudioLogger: React.FC = () => {
 
   const fetchLogs = async () => {
     setDbError(null);
+    setDebugInfo('Connecting...');
     const supabase = getSupabaseClient();
+    
     if (!supabase) {
-      setDbError("Missing API Keys in Settings");
+      const msg = "Missing API Keys in Settings";
+      setDbError(msg);
+      setDebugInfo(msg);
       return;
     }
 
     try {
-      const { data, error } = await supabase
+      // Simple fetch to verify connection
+      const { data, error, count } = await supabase
         .from('audio_logs')
-        .select('*')
+        .select('*', { count: 'exact' })
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
+
+      setDebugInfo(`Success. Found ${data?.length || 0} logs.`);
 
       if (data) {
         setIsConnected(true);
@@ -71,9 +82,9 @@ const AudioLogger: React.FC = () => {
           id: item.id,
           timestamp: new Date(item.created_at).toLocaleString(),
           customerName: item.customer_name || 'Unknown',
-          vehicle: item.vehicle || 'General',
-          duration: 'Recorded', // Duration isn't stored in DB yet, placeholder
-          transcriptPreview: item.transcript || item.summary || 'Processing...',
+          vehicle: item.vehicle || 'General Shop',
+          duration: 'Recorded', 
+          transcriptPreview: item.transcript || item.summary || 'Processing or Empty Log...',
           tags: item.tags || [],
           audioUrl: item.audio_url
         }));
@@ -82,7 +93,9 @@ const AudioLogger: React.FC = () => {
     } catch (err: any) {
       console.error("Error fetching logs:", err);
       setIsConnected(false);
-      setDbError(err.message || "Failed to connect to Supabase");
+      const msg = err.message || "Failed to connect to Supabase";
+      setDbError(msg);
+      setDebugInfo(`Error: ${msg}`);
     }
   };
 
@@ -271,6 +284,7 @@ const AudioLogger: React.FC = () => {
               {isConnected ? <Wifi size={12} className="text-green-500" /> : <WifiOff size={12} className="text-red-500" />}
               {isConnected ? "Database Connected" : "Offline / Connecting..."}
             </span>
+            <span className="font-mono text-xs opacity-50">DB Status: {debugInfo}</span>
             <button onClick={fetchLogs} className="hover:text-white flex items-center gap-1"><RefreshCw size={12}/> Refresh Logs</button>
           </div>
           
@@ -387,8 +401,9 @@ const AudioLogger: React.FC = () => {
             ))
           ) : (
             <div className="text-center text-slate-500 py-10 flex flex-col items-center">
-              <Mic size={32} className="mb-2 opacity-20" />
-              <p>No audio logs found.</p>
+              <Database size={32} className="mb-2 opacity-20" />
+              <p>No audio logs found in Database.</p>
+              <p className="text-xs mt-1 opacity-50">{debugInfo}</p>
               {!isConnected && <p className="text-xs text-red-400 mt-2">Check Database Connection in Settings</p>}
             </div>
           )}
@@ -467,3 +482,4 @@ const AudioLogger: React.FC = () => {
 };
 
 export default AudioLogger;
+
