@@ -42,6 +42,29 @@ const AudioLogger: React.FC = () => {
     isContinuousRef.current = isContinuous;
   }, [isContinuous]);
 
+  // --- LIFECYCLE ---
+  
+  useEffect(() => {
+    isMountedRef.current = true;
+    
+    // Load config
+    const storedConfig = localStorage.getItem('southport_config');
+    if (storedConfig) {
+      const config = JSON.parse(storedConfig);
+      if (config.audioSegmentDuration) {
+        setSegmentDuration(parseInt(config.audioSegmentDuration, 10));
+      }
+    }
+
+    // Initial Fetch
+    fetchLogs();
+
+    return () => {
+      isMountedRef.current = false;
+      cleanupRecordingResources();
+    };
+  }, []);
+
   // --- METHODS ---
 
   const cleanupRecordingResources = () => {
@@ -101,10 +124,10 @@ const AudioLogger: React.FC = () => {
             audioUrl: item.audio_url
           }));
           
-          // Merge real logs, removing any temps that might still be there
           setLogs(prev => {
-            const temps = prev.filter(l => l.id.startsWith('temp-'));
-            // If real logs have arrived, we can likely drop the temps, or keep them if they are very recent
+            // Keep existing logs but replace with new fetch
+            // This ensures if we have a real log for a temp ID, the temp ID is gone
+            // Note: Since we fetch all sorted by date, the new log will be at the top
             return formattedLogs; 
           });
         }
@@ -119,30 +142,6 @@ const AudioLogger: React.FC = () => {
       }
     }
   }, []);
-
-  // --- LIFECYCLE ---
-  
-  useEffect(() => {
-    isMountedRef.current = true;
-    
-    // Load config
-    const storedConfig = localStorage.getItem('southport_config');
-    if (storedConfig) {
-      const config = JSON.parse(storedConfig);
-      if (config.audioSegmentDuration) {
-        setSegmentDuration(parseInt(config.audioSegmentDuration, 10));
-      }
-    }
-
-    // Initial Fetch
-    fetchLogs();
-
-    return () => {
-      isMountedRef.current = false;
-      cleanupRecordingResources();
-      // Revoke any object URLs if we used them
-    };
-  }, [fetchLogs]);
 
   const startNewSegment = async () => {
     // Stop any existing recording properly first
@@ -262,7 +261,7 @@ const AudioLogger: React.FC = () => {
       return;
     }
 
-    // Optimistic Update
+    // Optimistic Update - Temporary Log
     const tempId = 'temp-' + Date.now();
     const tempLog: AudioLog = {
       id: tempId,
@@ -280,7 +279,7 @@ const AudioLogger: React.FC = () => {
       setServerLog(`Uploading ${audioBlob.size} bytes...`);
       const formData = new FormData();
       
-      // Changed to 'file' based on standard n8n behavior
+      // Use 'file' as it is the standard for n8n webhook nodes
       formData.append('file', audioBlob, 'recording.mp3'); 
 
       const response = await fetch(webhookUrl, {
@@ -295,17 +294,28 @@ const AudioLogger: React.FC = () => {
         throw new Error(`Server responded ${response.status}: ${text}`);
       }
 
-      setServerLog(`Upload Success! Waiting for AI...`);
+      setServerLog(`Upload Success! AI is analyzing...`);
       
-      // Wait for AI to finish processing then fetch real data
-      // Polling a few times to catch the result
-      setTimeout(() => { if (isMountedRef.current) fetchLogs(); }, 5000);
-      setTimeout(() => { if (isMountedRef.current) fetchLogs(); }, 10000);
+      // RETRY POLLING STRATEGY
+      // AI takes time (10-20s), so we check multiple times
+      const poll = (delay: number) => {
+        setTimeout(() => {
+          if (isMountedRef.current) {
+            console.log(`Polling DB at ${delay}ms...`);
+            fetchLogs();
+          }
+        }, delay);
+      };
+
+      poll(5000);  // 5s check
+      poll(10000); // 10s check
+      poll(15000); // 15s check
+      poll(30000); // 30s final check
 
     } catch (error: any) {
       console.error("Upload Error:", error);
       setServerLog(`Upload Failed: ${error.message}`);
-      // Remove temp log
+      // Remove temp log on error
       setLogs(prev => prev.filter(l => l.id !== tempId));
     } finally {
       if (isMountedRef.current) setIsProcessing(false);
