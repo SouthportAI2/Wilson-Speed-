@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Mic, Search, Play, Square, UploadCloud, RefreshCw, Clock, FileText, Bot, Cpu, Wifi, WifiOff, AlertTriangle, Database, Terminal } from 'lucide-react';
 import { askAssistant } from '../services/gemini';
@@ -5,7 +6,7 @@ import { getSupabaseClient } from '../services/supabase';
 import { AudioLog } from '../types';
 
 const AudioLogger: React.FC = () => {
-  // Recording State
+  // --- STATE ---
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -27,7 +28,7 @@ const AudioLogger: React.FC = () => {
   const [assistantResponse, setAssistantResponse] = useState('');
   const [isThinking, setIsThinking] = useState(false);
 
-  // Refs for stability
+  // --- REFS ---
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
@@ -37,22 +38,18 @@ const AudioLogger: React.FC = () => {
   const isRecordingRef = useRef(false);
   const isMountedRef = useRef(true);
 
-  // Sync ref with state
+  // Sync state to refs for event listeners
   useEffect(() => {
     isContinuousRef.current = isContinuous;
   }, [isContinuous]);
 
-  // Cleanup on unmount
+  // --- LIFECYCLE ---
+  
+  // 1. Mount/Unmount Cleanup
   useEffect(() => {
     isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-      cleanupRecordingResources();
-    };
-  }, []);
-
-  // Load settings
-  useEffect(() => {
+    
+    // Load config
     const storedConfig = localStorage.getItem('southport_config');
     if (storedConfig) {
       const config = JSON.parse(storedConfig);
@@ -60,7 +57,17 @@ const AudioLogger: React.FC = () => {
         setSegmentDuration(parseInt(config.audioSegmentDuration, 10));
       }
     }
+
+    // Initial Fetch
+    fetchLogs();
+
+    return () => {
+      isMountedRef.current = false;
+      cleanupRecordingResources();
+    };
   }, []);
+
+  // --- METHODS ---
 
   const cleanupRecordingResources = () => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -70,9 +77,13 @@ const AudioLogger: React.FC = () => {
       mediaRecorderRef.current.stop();
     }
     
+    // Important: Stop all tracks to turn off microphone light
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
     }
+    
+    chunksRef.current = [];
   };
 
   const fetchLogs = useCallback(async () => {
@@ -86,6 +97,7 @@ const AudioLogger: React.FC = () => {
       const msg = "Missing API Keys in Settings";
       setDbError(msg);
       setDebugInfo(msg);
+      setIsConnected(false);
       return;
     }
 
@@ -93,13 +105,14 @@ const AudioLogger: React.FC = () => {
       const { data, error } = await supabase
         .from('audio_logs')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(50);
 
       if (error) throw error;
 
       if (isMountedRef.current) {
-        setDebugInfo(`Success. Rows: ${data?.length || 0}`);
         setIsConnected(true);
+        setDebugInfo(`Sync Success. Rows: ${data?.length || 0}`);
         
         if (data) {
           const formattedLogs: AudioLog[] = data.map(item => ({
@@ -108,7 +121,7 @@ const AudioLogger: React.FC = () => {
             customerName: item.customer_name || 'Unknown',
             vehicle: item.vehicle || 'General Shop',
             duration: 'Recorded', 
-            transcriptPreview: item.transcript || item.summary || 'Processing or Empty Log...',
+            transcriptPreview: item.transcript || item.summary || 'Processing...',
             tags: item.tags || [],
             audioUrl: item.audio_url
           }));
@@ -116,108 +129,95 @@ const AudioLogger: React.FC = () => {
         }
       }
     } catch (err: any) {
-      console.error("Error fetching logs:", err);
+      console.error("Supabase Error:", err);
       if (isMountedRef.current) {
         setIsConnected(false);
-        const msg = err.message || "Failed to connect to Supabase";
+        const msg = err.message || "Failed to fetch data";
         setDbError(msg);
         setDebugInfo(`DB Error: ${msg}`);
       }
     }
   }, []);
 
-  // Initial fetch
-  useEffect(() => {
-    fetchLogs();
-  }, [fetchLogs]);
-
   const startNewSegment = async () => {
+    // Stop any existing recording properly first
+    cleanupRecordingResources();
+
     try {
-      // 1. Get Stream
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       
-      // 2. Create Recorder
       const recorder = new MediaRecorder(stream);
       mediaRecorderRef.current = recorder;
       chunksRef.current = [];
 
       recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
+        if (e.data && e.data.size > 0) {
           chunksRef.current.push(e.data);
         }
       };
 
       recorder.onstop = async () => {
-        // Prepare blob
         const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-        chunksRef.current = []; // Clear immediately
+        chunksRef.current = []; // Clear
         
-        // Clean up stream for this segment
-        stream.getTracks().forEach(track => track.stop());
-
-        // Upload
         await handleUpload(blob);
 
-        // Check if we should restart
+        // Continuous Logic: If we are still "Recording" in state, start a new segment
         if (isMountedRef.current && isRecordingRef.current && isContinuousRef.current) {
           console.log("Starting next continuous segment...");
           setRecordingTime(0);
-          startNewSegment(); // Recursively start next segment
+          startNewSegment(); // Recursion for next segment
         } else {
-          setIsRecording(false);
-          isRecordingRef.current = false;
+          // Fully stop
+          if (streamRef.current) {
+            streamRef.current.getTracks().forEach(track => track.stop());
+          }
+          if (isMountedRef.current) {
+            setIsRecording(false);
+            setServerLog("Recording stopped.");
+          }
         }
       };
 
-      // 3. Start Recording
       recorder.start();
       
-      // 4. Update State
       if (isMountedRef.current) {
         setIsRecording(true);
         isRecordingRef.current = true;
-        setServerLog("Recording segment...");
+        setServerLog("Recording started...");
+        startTimers();
       }
 
-      // 5. Start Timers
-      startTimers();
-
-    } catch (err) {
-      console.error("Error starting recording:", err);
+    } catch (err: any) {
+      console.error("Mic Error:", err);
       setServerLog("Microphone Access Denied");
-      alert("Could not access microphone.");
+      alert("Microphone error: " + err.message);
       setIsRecording(false);
       isRecordingRef.current = false;
     }
   };
 
   const startTimers = () => {
-    // Clear existing
     if (timerRef.current) clearInterval(timerRef.current);
     if (segmentTimerRef.current) clearInterval(segmentTimerRef.current);
 
-    // Main Timer (Visual only)
     setRecordingTime(0);
     timerRef.current = window.setInterval(() => {
-      if (isMountedRef.current) {
-        setRecordingTime(prev => prev + 1);
-      }
+      if (isMountedRef.current) setRecordingTime(t => t + 1);
     }, 1000);
 
-    // Segment Timer (Logic)
     if (isContinuous) {
       const splitSeconds = segmentDuration * 60;
       setNextSplitIn(splitSeconds);
       
       segmentTimerRef.current = window.setInterval(() => {
         if (!isMountedRef.current) return;
-        
         setNextSplitIn(prev => {
           if (prev <= 1) {
-            // Trigger Split
+            // Trigger split
             if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-              mediaRecorderRef.current.stop(); // This triggers onstop -> which triggers restart
+              mediaRecorderRef.current.stop();
             }
             return splitSeconds;
           }
@@ -228,43 +228,43 @@ const AudioLogger: React.FC = () => {
   };
 
   const stopRecording = () => {
-    isRecordingRef.current = false; // Prevent auto-restart
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+    isRecordingRef.current = false; // Prevent restart
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
       mediaRecorderRef.current.stop();
+    } else {
+      cleanupRecordingResources();
+      setIsRecording(false);
     }
-    cleanupRecordingResources();
-    setIsRecording(false);
   };
 
   const handleUpload = async (audioBlob: Blob) => {
     if (!isMountedRef.current) return;
-    
     setIsProcessing(true);
-    
-    if (audioBlob.size === 0) {
-      setServerLog("Empty audio file, skipping.");
-      setIsProcessing(false);
-      return;
-    }
 
     const storedConfig = localStorage.getItem('southport_config');
     const config = storedConfig ? JSON.parse(storedConfig) : {};
     const webhookUrl = config.n8nWebhookAudio;
 
     if (!webhookUrl) {
-      setServerLog("No Webhook URL configured.");
+      setServerLog("Error: No Webhook URL in Settings");
       setIsProcessing(false);
       return;
     }
 
-    // Optimistic UI Update
+    if (audioBlob.size === 0) {
+      setServerLog("Error: Empty audio file");
+      setIsProcessing(false);
+      return;
+    }
+
+    // Optimistic Update
     const tempId = 'temp-' + Date.now();
     const tempLog: AudioLog = {
       id: tempId,
       timestamp: new Date().toLocaleTimeString(),
       customerName: 'Uploading...',
       vehicle: 'Processing',
-      duration: '...',
+      duration: formatTime(recordingTime || (segmentDuration * 60)),
       transcriptPreview: 'Sending to AI...',
       tags: ['Upload'],
       audioUrl: ''
@@ -274,30 +274,35 @@ const AudioLogger: React.FC = () => {
     try {
       setServerLog(`Uploading ${audioBlob.size} bytes...`);
       const formData = new FormData();
-      formData.append('file', audioBlob, `rec-${Date.now()}.webm`);
+      // Use 'file' as the key - Standard for n8n binary nodes
+      formData.append('file', audioBlob, 'recording.webm');
       
+      // Note: We are deliberately NOT sending extra fields like 'timestamp' 
+      // to ensure n8n treats this strictly as a file upload.
+
       const response = await fetch(webhookUrl, {
         method: 'POST',
-        body: formData
+        body: formData,
       });
 
       const text = await response.text();
-      
+      console.log("Server Response:", text);
+
       if (!response.ok) {
-        throw new Error(`Server Error: ${response.status} ${text}`);
+        throw new Error(`Server responded ${response.status}: ${text}`);
       }
 
-      setServerLog(`Success: ${text.substring(0, 50)}...`);
+      setServerLog(`Upload Success! AI Processing...`);
       
-      // Poll for the real log
+      // Wait for AI to finish processing then fetch real data
       setTimeout(() => {
         if (isMountedRef.current) fetchLogs();
-      }, 5000);
+      }, 8000);
 
     } catch (error: any) {
-      console.error("Upload failed", error);
-      setServerLog(`Error: ${error.message}`);
-      // Remove temp log on error
+      console.error("Upload Error:", error);
+      setServerLog(`Upload Failed: ${error.message}`);
+      // Remove temp log
       setLogs(prev => prev.filter(l => l.id !== tempId));
     } finally {
       if (isMountedRef.current) setIsProcessing(false);
@@ -306,19 +311,24 @@ const AudioLogger: React.FC = () => {
 
   const handlePlayAudio = (url?: string) => {
     if (!url) return;
-    try {
-      const audio = new Audio(url);
-      audio.play().catch(e => alert("Could not play audio: " + e.message));
-    } catch (e) {
-      console.error("Audio error", e);
-    }
+    const audio = new Audio(url);
+    audio.play().catch(e => alert("Playback error: " + e.message));
   };
 
-  // Helper
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const handleAssistantAsk = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!assistantQuery.trim()) return;
+    setIsThinking(true);
+    const context = logs.slice(0, 10).map(l => `[${l.timestamp}] ${l.customerName}: ${l.transcriptPreview}`).join('\n');
+    const response = await askAssistant(assistantQuery, context);
+    setAssistantResponse(response);
+    setIsThinking(false);
   };
 
   const filteredLogs = logs.filter(log => 
@@ -330,70 +340,77 @@ const AudioLogger: React.FC = () => {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-200px)]">
-      {/* Left Column: Search & List */}
+      {/* Left Column: List & Controls */}
       <div className="lg:col-span-2 flex flex-col gap-4">
-        {/* Controls */}
-        <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 space-y-4">
-          <div className="flex justify-between items-center text-xs text-slate-400 mb-2">
-            <span className="flex items-center gap-1">
-              {isConnected ? <Wifi size={12} className="text-green-500" /> : <WifiOff size={12} className="text-red-500" />}
-              {isConnected ? "Database Connected" : "Offline / Connecting..."}
-            </span>
-            <span className="font-mono text-xs opacity-50">{debugInfo}</span>
-            <button onClick={fetchLogs} className="hover:text-white flex items-center gap-1"><RefreshCw size={12}/> Refresh Logs</button>
+        {/* Control Panel */}
+        <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 space-y-4 shadow-sm">
+          {/* Status Bar */}
+          <div className="flex justify-between items-center text-xs text-slate-400">
+            <div className="flex items-center gap-3">
+              <span className={`flex items-center gap-1.5 px-2 py-1 rounded ${isConnected ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+                {isConnected ? <Wifi size={12} /> : <WifiOff size={12} />}
+                {isConnected ? "DB Connected" : "DB Offline"}
+              </span>
+              <span className="font-mono opacity-50 hidden sm:inline">{debugInfo}</span>
+            </div>
+            <button onClick={fetchLogs} className="hover:text-white flex items-center gap-1 transition-colors">
+              <RefreshCw size={12}/> Refresh
+            </button>
           </div>
-          
-          {/* Server Response Panel */}
-          <div className="bg-black/30 border border-slate-700 p-2 rounded font-mono text-[10px] text-green-400 flex gap-2 items-center overflow-hidden whitespace-nowrap">
-             <Terminal size={12} className="shrink-0" />
+
+          {/* Server Log Terminal */}
+          <div className="bg-slate-950 border border-slate-800 p-2.5 rounded-lg font-mono text-[11px] text-green-400 flex gap-3 items-center overflow-hidden">
+             <Terminal size={12} className="shrink-0 text-slate-500" />
              <span className="truncate">{serverLog}</span>
           </div>
-          
+
+          {/* Error Banner */}
           {dbError && (
-             <div className="bg-red-500/10 border border-red-500/30 text-red-400 p-3 rounded-lg text-xs flex items-center gap-2">
-               <AlertTriangle size={14} />
-               <span><strong>Connection Error:</strong> {dbError}</span>
+             <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-lg text-xs flex items-center gap-2">
+               <AlertTriangle size={14} className="shrink-0" />
+               <span>{dbError}</span>
              </div>
           )}
           
+          {/* Main Controls */}
           <div className="flex flex-col md:flex-row gap-4 items-center">
             <div className="relative flex-1 w-full">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
               <input 
                 type="text" 
                 placeholder="Search logs..." 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-10 pr-4 py-3 text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-10 pr-4 py-3 text-sm text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all placeholder:text-slate-600"
               />
             </div>
             
             {isRecording ? (
               <button 
                 onClick={stopRecording}
-                className="w-full md:w-auto flex items-center justify-center gap-3 px-6 py-3 rounded-lg font-bold bg-red-500/20 text-red-500 border border-red-500/50 hover:bg-red-500/30 transition-all animate-pulse"
+                className="w-full md:w-auto flex items-center justify-center gap-3 px-6 py-3 rounded-lg font-bold bg-red-500/10 text-red-500 border border-red-500/50 hover:bg-red-500/20 transition-all animate-pulse"
               >
                 <div className="w-2 h-2 rounded-full bg-red-500"></div>
-                <Square size={20} fill="currentColor" />
-                <span>{formatTime(recordingTime)}</span>
-                <span className="text-xs font-normal opacity-80 ml-1">STOP</span>
+                <Square size={18} fill="currentColor" />
+                <span className="font-mono tabular-nums">{formatTime(recordingTime)}</span>
+                <span className="text-xs font-semibold ml-1">STOP</span>
               </button>
             ) : (
               <button 
                 onClick={startNewSegment}
                 disabled={isProcessing}
-                className={`w-full md:w-auto flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-bold text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg ${
+                className={`w-full md:w-auto flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-bold text-white shadow-lg transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
                   isContinuous ? 'bg-purple-600 hover:bg-purple-500 shadow-purple-900/20' : 'bg-blue-600 hover:bg-blue-500 shadow-blue-900/20'
                 }`}
               >
                 {isProcessing ? (
                   <>
-                    <UploadCloud size={20} className="animate-spin" />
+                    <UploadCloud size={18} className="animate-spin" />
                     Processing...
                   </>
                 ) : (
                   <>
-                    <Mic size={20} />
+                    <Mic size={18} />
                     {isContinuous ? 'Start Monitor' : 'Start Recording'}
                   </>
                 )}
@@ -401,13 +418,14 @@ const AudioLogger: React.FC = () => {
             )}
           </div>
           
-          <div className="flex items-center gap-2 text-sm text-slate-400">
+          {/* Continuous Mode Toggle */}
+          <div className="flex items-center justify-between text-sm pt-2">
              <div 
                onClick={() => !isRecording && setIsContinuous(!isContinuous)}
-               className={`flex items-center gap-2 cursor-pointer select-none px-3 py-1.5 rounded-lg border transition-all ${
+               className={`flex items-center gap-2 cursor-pointer select-none px-3 py-1.5 rounded-md border transition-all ${
                  isContinuous 
                    ? 'bg-purple-500/10 border-purple-500/30 text-purple-300' 
-                   : 'bg-slate-900 border-slate-700 hover:border-slate-600'
+                   : 'bg-transparent border-transparent text-slate-500 hover:text-slate-300'
                } ${isRecording ? 'opacity-50 cursor-not-allowed' : ''}`}
              >
                 <RefreshCw size={14} className={isContinuous ? "animate-spin" : ""} />
@@ -415,133 +433,129 @@ const AudioLogger: React.FC = () => {
              </div>
              
              {isContinuous && (
-               <span className="text-xs flex items-center gap-1">
-                 <Clock size={12} />
-                 Auto-splits every {segmentDuration} min
-               </span>
-             )}
-
-             {isRecording && isContinuous && (
-               <span className="ml-auto text-xs text-purple-400 font-mono">
-                 Next upload in: {formatTime(nextSplitIn)}
-               </span>
+               <div className="text-xs text-slate-500 flex items-center gap-3">
+                 <span className="flex items-center gap-1"><Clock size={12} /> {segmentDuration}m segments</span>
+                 {isRecording && <span className="text-purple-400 font-mono">Next split: {formatTime(nextSplitIn)}</span>}
+               </div>
              )}
           </div>
         </div>
 
-        {/* List */}
-        <div className="flex-1 bg-slate-800/50 rounded-xl border border-slate-700 overflow-y-auto p-4 space-y-3">
+        {/* Logs List */}
+        <div className="flex-1 bg-slate-800/50 rounded-xl border border-slate-700 overflow-y-auto p-4 space-y-3 custom-scrollbar">
           {filteredLogs.length > 0 ? (
             filteredLogs.map(log => (
               <div 
                 key={log.id}
                 onClick={() => setSelectedLog(log)}
-                className={`p-4 rounded-lg border cursor-pointer transition-all ${
+                className={`p-4 rounded-lg border cursor-pointer transition-all hover:-translate-y-0.5 ${
                   selectedLog?.id === log.id 
-                    ? 'bg-blue-600/10 border-blue-500' 
+                    ? 'bg-blue-500/10 border-blue-500/50 shadow-lg shadow-blue-900/10' 
                     : 'bg-slate-800 border-slate-700 hover:border-slate-600'
                 }`}
               >
                 <div className="flex justify-between items-start mb-2">
                   <div>
-                     <h4 className="font-bold text-white">{log.customerName}</h4>
-                     <span className="text-xs text-blue-400 bg-blue-400/10 px-2 py-0.5 rounded mr-2">{log.vehicle}</span>
-                     <span className="text-xs text-slate-500">{log.timestamp}</span>
+                     <h4 className={`font-bold ${log.customerName === 'Unknown' ? 'text-slate-400' : 'text-white'}`}>
+                       {log.customerName}
+                     </h4>
+                     <div className="flex items-center gap-2 mt-1">
+                       <span className="text-[10px] font-medium text-blue-300 bg-blue-500/10 px-1.5 py-0.5 rounded border border-blue-500/20">
+                         {log.vehicle}
+                       </span>
+                       <span className="text-[10px] text-slate-500">{log.timestamp}</span>
+                     </div>
                   </div>
-                  <div className="flex items-center gap-2 text-slate-400 text-sm">
-                    {log.duration}
+                  <div className="text-slate-500 text-xs font-mono">{log.duration}</div>
+                </div>
+                <p className="text-slate-400 text-sm line-clamp-2 leading-relaxed">{log.transcriptPreview}</p>
+                {log.tags && log.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-3">
+                    {log.tags.slice(0,3).map((tag, i) => (
+                      <span key={i} className="text-[10px] bg-slate-700/50 text-slate-400 px-2 py-0.5 rounded-full border border-slate-600">#{tag}</span>
+                    ))}
                   </div>
-                </div>
-                <p className="text-slate-400 text-sm line-clamp-2">{log.transcriptPreview}</p>
-                <div className="flex gap-2 mt-2">
-                  {log.tags && log.tags.map(tag => (
-                    <span key={tag} className="text-[10px] bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full">#{tag}</span>
-                  ))}
-                </div>
+                )}
               </div>
             ))
           ) : (
-            <div className="text-center text-slate-500 py-10 flex flex-col items-center">
-              <Database size={32} className="mb-2 opacity-20" />
-              <p>No audio logs found in Database.</p>
-              <p className="text-xs mt-1 opacity-50">{debugInfo}</p>
-              {!isConnected && <p className="text-xs text-red-400 mt-2">Check Database Connection in Settings</p>}
+            <div className="h-full flex flex-col items-center justify-center text-slate-500 gap-3 opacity-60">
+              <Database size={40} className="stroke-1" />
+              <p className="text-sm">No audio logs found.</p>
             </div>
           )}
         </div>
       </div>
 
       {/* Right Column: Assistant & Details */}
-      <div className="bg-slate-800 rounded-xl border border-slate-700 flex flex-col overflow-hidden">
+      <div className="bg-slate-800 rounded-xl border border-slate-700 flex flex-col overflow-hidden shadow-xl">
         {selectedLog ? (
           <div className="flex-1 p-6 overflow-y-auto">
              <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-700">
                <div>
-                 <h3 className="text-xl font-bold text-white">Transcript Details</h3>
-                 <p className="text-slate-400 text-sm">{selectedLog.timestamp}</p>
+                 <h3 className="text-lg font-bold text-white">Transcript Details</h3>
+                 <p className="text-slate-400 text-xs mt-1">ID: {selectedLog.id.substring(0,8)}</p>
                </div>
                {selectedLog.audioUrl && (
                   <button 
                     onClick={() => handlePlayAudio(selectedLog.audioUrl)}
                     className="p-3 bg-blue-600 rounded-full hover:bg-blue-500 text-white shadow-lg transition-transform active:scale-95"
                   >
-                    <Play size={20} fill="currentColor" />
+                    <Play size={18} fill="currentColor" />
                   </button>
                )}
              </div>
              
-             <div className="prose prose-invert max-w-none">
-               <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-800 mb-4">
-                  <p className="text-slate-300 leading-relaxed font-mono text-sm">{selectedLog.transcriptPreview}</p>
+             <div className="space-y-6">
+               <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-800">
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Transcript</span>
+                  <p className="text-slate-300 leading-relaxed text-sm font-mono whitespace-pre-wrap">{selectedLog.transcriptPreview}</p>
                </div>
                
-               <h4 className="font-semibold text-white mb-2 flex items-center gap-2"><Cpu size={16} /> AI Analysis</h4>
-               <ul className="list-disc list-inside text-slate-400 text-sm space-y-1 mb-6">
-                 <li>Customer: <span className="text-white">{selectedLog.customerName}</span></li>
-                 <li>Vehicle: <span className="text-white">{selectedLog.vehicle}</span></li>
-               </ul>
+               <div>
+                 <h4 className="text-sm font-bold text-white mb-3 flex items-center gap-2"><Cpu size={14} className="text-purple-400"/> AI Analysis</h4>
+                 <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-slate-700/30 p-3 rounded border border-slate-700">
+                      <div className="text-[10px] text-slate-500 uppercase">Customer</div>
+                      <div className="text-sm text-white font-medium truncate">{selectedLog.customerName}</div>
+                    </div>
+                    <div className="bg-slate-700/30 p-3 rounded border border-slate-700">
+                      <div className="text-[10px] text-slate-500 uppercase">Vehicle</div>
+                      <div className="text-sm text-white font-medium truncate">{selectedLog.vehicle}</div>
+                    </div>
+                 </div>
+               </div>
              </div>
           </div>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-slate-500 p-6 text-center">
-            <FileText size={48} className="mb-4 opacity-20" />
-            <p>Select a recording to view transcript and AI insights.</p>
+            <FileText size={48} className="mb-4 opacity-10" />
+            <p className="text-sm">Select a recording to view transcript and AI insights.</p>
           </div>
         )}
 
         {/* Voice Assistant Chat */}
-        <div className="p-4 bg-slate-900/80 border-t border-slate-700">
+        <div className="p-4 bg-slate-900/80 border-t border-slate-700 backdrop-blur-sm">
           {assistantResponse && (
-            <div className="mb-4 p-3 bg-blue-600/20 border border-blue-500/30 rounded-lg text-sm text-blue-100 animate-fade-in flex gap-3">
-              <Bot className="shrink-0 text-blue-400" size={20} />
-              <div>{assistantResponse}</div>
+            <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg text-sm text-blue-200 animate-fade-in flex gap-3 shadow-inner">
+              <Bot className="shrink-0 text-blue-400" size={18} />
+              <div className="leading-relaxed">{assistantResponse}</div>
             </div>
           )}
-          <form 
-            onSubmit={async (e) => {
-              e.preventDefault();
-              if (!assistantQuery.trim()) return;
-              setIsThinking(true);
-              const context = logs.slice(0, 10).map(l => `[${l.timestamp}] ${l.customerName}: ${l.transcriptPreview}`).join('\n');
-              const response = await askAssistant(assistantQuery, context);
-              setAssistantResponse(response);
-              setIsThinking(false);
-            }} 
-            className="relative"
-          >
+          <form onSubmit={handleAssistantAsk} className="relative">
             <input 
               type="text" 
               value={assistantQuery}
               onChange={(e) => setAssistantQuery(e.target.value)}
               placeholder="Ask AI about these logs..."
-              className="w-full bg-slate-800 border border-slate-600 rounded-full pl-4 pr-12 py-3 text-sm text-white focus:ring-1 focus:ring-blue-500 focus:outline-none"
+              className="w-full bg-slate-800 border border-slate-600 rounded-lg pl-4 pr-12 py-3 text-sm text-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
             />
             <button 
               type="submit" 
               disabled={isThinking}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-blue-600 rounded-full text-white hover:bg-blue-500 disabled:opacity-50"
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-white transition-colors disabled:opacity-50"
             >
-              {isThinking ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : <Bot size={16} />}
+              {isThinking ? <div className="w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></div> : <Bot size={18} />}
             </button>
           </form>
         </div>
