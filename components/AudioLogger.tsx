@@ -118,7 +118,6 @@ const AudioLogger: React.FC = () => {
           setLogs(prev => {
             const now = Date.now();
             
-            // Filter out expired temp logs
             const recentTempLogs = prev.filter(log => {
               if (!log.id.startsWith('temp-')) return false;
               const tempIdTimestamp = parseInt(log.id.replace('temp-', ''));
@@ -133,8 +132,6 @@ const AudioLogger: React.FC = () => {
             
             console.log(`✅ Merged: ${formattedLogs.length} real + ${recentTempLogs.length} temp = ${formattedLogs.length + recentTempLogs.length} total`);
             
-            // Put REAL LOGS FIRST (most recent at top)
-            // Then temp logs below (will auto-expire)
             const merged = [...formattedLogs, ...recentTempLogs];
             
             setDebugInfo(`Sync Success. Rows: ${merged.length} (${formattedLogs.length} real, ${recentTempLogs.length} temp)`);
@@ -153,6 +150,49 @@ const AudioLogger: React.FC = () => {
       }
     }
   }, []);
+
+  const handleTestSupabase = async () => {
+    console.log('🧪 TESTING SUPABASE CONNECTION...');
+    const supabase = getSupabaseClient();
+    
+    if (!supabase) {
+      console.error('❌ No Supabase client');
+      alert('No Supabase client - check Settings');
+      return;
+    }
+    
+    console.log('✅ Supabase client exists');
+
+    try {
+      const { data, error, count } = await supabase
+        .from('audio_logs')
+        .select('*', { count: 'exact' })
+        .limit(10);
+      
+      console.log('📊 SUPABASE RESPONSE:', { data, error, count });
+
+      if (error) {
+        console.error('❌ Supabase error:', error);
+        alert(`Supabase Error: ${error.message}\n\nCheck console for details.`);
+        return;
+      }
+      
+      if (data && data.length > 0) {
+        console.log('✅ SUCCESS! Retrieved data:');
+        data.forEach((row, i) => {
+          console.log(`  ${i + 1}. ${row.customer_name} - ${row.vehicle}`);
+        });
+        alert(`SUCCESS! Found ${count} total records in database.\n\nRetrieved ${data.length} rows.\n\nCheck console for full details.`);
+      } else {
+        console.warn('⚠️ Query succeeded but returned no data');
+        alert('Connected to Supabase, but no data found.');
+      }
+      
+    } catch (err: any) {
+      console.error('💥 Exception:', err);
+      alert(`Exception: ${err.message}\n\nCheck console for stack trace.`);
+    }
+  };
 
   const startNewSegment = async () => {
     cleanupRecordingResources();
@@ -373,9 +413,19 @@ const AudioLogger: React.FC = () => {
               </span>
               <span className="font-mono opacity-50 hidden sm:inline">{debugInfo}</span>
             </div>
-            <button onClick={fetchLogs} className="hover:text-white flex items-center gap-1 transition-colors">
-              <RefreshCw size={12}/> Refresh
-            </button>
+            
+            <div className="flex gap-2">
+              <button 
+                onClick={handleTestSupabase}
+                className="hover:text-yellow-400 text-yellow-500 flex items-center gap-1 font-bold bg-yellow-500/10 px-2 py-1 rounded border border-yellow-500/30 text-[10px]"
+              >
+                🧪 TEST DB
+              </button>
+              
+              <button onClick={fetchLogs} className="hover:text-white flex items-center gap-1 transition-colors">
+                <RefreshCw size={12}/> Refresh
+              </button>
+            </div>
           </div>
 
           <div className="bg-slate-950 border border-slate-800 p-2.5 rounded-lg font-mono text-[11px] text-green-400 flex gap-3 items-center overflow-hidden">
@@ -578,4 +628,3 @@ const AudioLogger: React.FC = () => {
 };
 
 export default AudioLogger;
-
