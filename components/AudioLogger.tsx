@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Mic, Search, Play, Square, UploadCloud, RefreshCw, Clock, FileText, Bot, Cpu, Wifi, WifiOff, AlertTriangle, Database, Terminal } from 'lucide-react';
 import { askAssistant } from '../services/gemini';
 import { getSupabaseClient } from '../services/supabase';
@@ -9,7 +8,6 @@ const AudioLogger: React.FC = () => {
   // Recording State
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
-  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isContinuous, setIsContinuous] = useState(false);
   const [segmentDuration, setSegmentDuration] = useState(5); // Default 5 minutes
@@ -29,13 +27,31 @@ const AudioLogger: React.FC = () => {
   const [assistantResponse, setAssistantResponse] = useState('');
   const [isThinking, setIsThinking] = useState(false);
 
-  const chunks = useRef<BlobPart[]>([]);
+  // Refs for stability
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const chunksRef = useRef<BlobPart[]>([]);
   const timerRef = useRef<number | null>(null);
   const segmentTimerRef = useRef<number | null>(null);
   const isContinuousRef = useRef(false);
   const isRecordingRef = useRef(false);
+  const isMountedRef = useRef(true);
 
-  // Load settings and fetch data
+  // Sync ref with state
+  useEffect(() => {
+    isContinuousRef.current = isContinuous;
+  }, [isContinuous]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      cleanupRecordingResources();
+    };
+  }, []);
+
+  // Load settings
   useEffect(() => {
     const storedConfig = localStorage.getItem('southport_config');
     if (storedConfig) {
@@ -44,15 +60,24 @@ const AudioLogger: React.FC = () => {
         setSegmentDuration(parseInt(config.audioSegmentDuration, 10));
       }
     }
-    fetchLogs();
   }, []);
 
-  // Sync ref with state
-  useEffect(() => {
-    isContinuousRef.current = isContinuous;
-  }, [isContinuous]);
+  const cleanupRecordingResources = () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (segmentTimerRef.current) clearInterval(segmentTimerRef.current);
+    
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+    }
+  };
 
-  const fetchLogs = async () => {
+  const fetchLogs = useCallback(async () => {
+    if (!isMountedRef.current) return;
+
     setDbError(null);
     setDebugInfo('Connecting to DB...');
     const supabase = getSupabaseClient();
@@ -65,213 +90,235 @@ const AudioLogger: React.FC = () => {
     }
 
     try {
-      // Simple fetch to verify connection
-      const { data, error, count } = await supabase
+      const { data, error } = await supabase
         .from('audio_logs')
-        .select('*', { count: 'exact' })
+        .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) {
-        throw error;
-      }
+      if (error) throw error;
 
-      setDebugInfo(`Success. Rows: ${data?.length || 0}`);
-
-      if (data) {
+      if (isMountedRef.current) {
+        setDebugInfo(`Success. Rows: ${data?.length || 0}`);
         setIsConnected(true);
-        const formattedLogs: AudioLog[] = data.map(item => ({
-          id: item.id,
-          timestamp: new Date(item.created_at).toLocaleString(),
-          customerName: item.customer_name || 'Unknown',
-          vehicle: item.vehicle || 'General Shop',
-          duration: 'Recorded', 
-          transcriptPreview: item.transcript || item.summary || 'Processing or Empty Log...',
-          tags: item.tags || [],
-          audioUrl: item.audio_url
-        }));
-        setLogs(formattedLogs);
+        
+        if (data) {
+          const formattedLogs: AudioLog[] = data.map(item => ({
+            id: item.id,
+            timestamp: new Date(item.created_at).toLocaleString(),
+            customerName: item.customer_name || 'Unknown',
+            vehicle: item.vehicle || 'General Shop',
+            duration: 'Recorded', 
+            transcriptPreview: item.transcript || item.summary || 'Processing or Empty Log...',
+            tags: item.tags || [],
+            audioUrl: item.audio_url
+          }));
+          setLogs(formattedLogs);
+        }
       }
     } catch (err: any) {
       console.error("Error fetching logs:", err);
-      setIsConnected(false);
-      const msg = err.message || "Failed to connect to Supabase";
-      setDbError(msg);
-      setDebugInfo(`DB Error: ${msg}`);
+      if (isMountedRef.current) {
+        setIsConnected(false);
+        const msg = err.message || "Failed to connect to Supabase";
+        setDbError(msg);
+        setDebugInfo(`DB Error: ${msg}`);
+      }
     }
-  };
+  }, []);
 
-  const startRecording = async () => {
+  // Initial fetch
+  useEffect(() => {
+    fetchLogs();
+  }, [fetchLogs]);
+
+  const startNewSegment = async () => {
     try {
+      // 1. Get Stream
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
+      streamRef.current = stream;
       
+      // 2. Create Recorder
+      const recorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+      chunksRef.current = [];
+
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
-          chunks.current.push(e.data);
+          chunksRef.current.push(e.data);
         }
       };
 
       recorder.onstop = async () => {
-        const blob = new Blob(chunks.current, { type: 'audio/webm' });
-        chunks.current = [];
+        // Prepare blob
+        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        chunksRef.current = []; // Clear immediately
+        
+        // Clean up stream for this segment
+        stream.getTracks().forEach(track => track.stop());
+
+        // Upload
         await handleUpload(blob);
 
-        // Auto-Restart Logic for Continuous Mode
-        if (isRecordingRef.current && isContinuousRef.current) {
-          console.log("Auto-restarting recording segment...");
-          recorder.start();
+        // Check if we should restart
+        if (isMountedRef.current && isRecordingRef.current && isContinuousRef.current) {
+          console.log("Starting next continuous segment...");
           setRecordingTime(0);
-          resetSegmentTimer();
+          startNewSegment(); // Recursively start next segment
         } else {
-          // Full stop
-          stream.getTracks().forEach(track => track.stop());
+          setIsRecording(false);
+          isRecordingRef.current = false;
         }
       };
 
+      // 3. Start Recording
       recorder.start();
-      setMediaRecorder(recorder);
-      setIsRecording(true);
-      isRecordingRef.current = true;
-      setServerLog("Recording in progress...");
       
-      // Main Timer
-      setRecordingTime(0);
-      timerRef.current = window.setInterval(() => {
-        setRecordingTime(prev => prev + 1);
-      }, 1000);
-
-      // Segment Timer (if continuous)
-      if (isContinuous) {
-        resetSegmentTimer(recorder);
+      // 4. Update State
+      if (isMountedRef.current) {
+        setIsRecording(true);
+        isRecordingRef.current = true;
+        setServerLog("Recording segment...");
       }
 
+      // 5. Start Timers
+      startTimers();
+
     } catch (err) {
-      console.error("Error accessing microphone:", err);
-      alert("Could not access microphone. Please check permissions.");
+      console.error("Error starting recording:", err);
+      setServerLog("Microphone Access Denied");
+      alert("Could not access microphone.");
+      setIsRecording(false);
+      isRecordingRef.current = false;
     }
   };
 
-  const resetSegmentTimer = (activeRecorder?: MediaRecorder) => {
+  const startTimers = () => {
+    // Clear existing
+    if (timerRef.current) clearInterval(timerRef.current);
     if (segmentTimerRef.current) clearInterval(segmentTimerRef.current);
-    
-    // Calculate split time in seconds
-    const splitSeconds = segmentDuration * 60;
-    setNextSplitIn(splitSeconds);
 
-    segmentTimerRef.current = window.setInterval(() => {
-      setNextSplitIn(prev => {
-        if (prev <= 1) {
-          // Trigger split
-          const recorder = activeRecorder || mediaRecorder;
-          if (recorder && recorder.state === 'recording') {
-            recorder.stop(); // This triggers onstop, which triggers restart
-          }
-          return splitSeconds;
-        }
-        return prev - 1;
-      });
+    // Main Timer (Visual only)
+    setRecordingTime(0);
+    timerRef.current = window.setInterval(() => {
+      if (isMountedRef.current) {
+        setRecordingTime(prev => prev + 1);
+      }
     }, 1000);
+
+    // Segment Timer (Logic)
+    if (isContinuous) {
+      const splitSeconds = segmentDuration * 60;
+      setNextSplitIn(splitSeconds);
+      
+      segmentTimerRef.current = window.setInterval(() => {
+        if (!isMountedRef.current) return;
+        
+        setNextSplitIn(prev => {
+          if (prev <= 1) {
+            // Trigger Split
+            if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+              mediaRecorderRef.current.stop(); // This triggers onstop -> which triggers restart
+            }
+            return splitSeconds;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
   };
 
   const stopRecording = () => {
-    isRecordingRef.current = false; // Signal intent to fully stop
+    isRecordingRef.current = false; // Prevent auto-restart
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    cleanupRecordingResources();
     setIsRecording(false);
-    
-    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-      mediaRecorder.stop();
-    }
-    
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-    if (segmentTimerRef.current) {
-      clearInterval(segmentTimerRef.current);
-      segmentTimerRef.current = null;
-    }
   };
 
   const handleUpload = async (audioBlob: Blob) => {
-    setIsProcessing(true);
-    setServerLog("Preparing upload...");
+    if (!isMountedRef.current) return;
     
-    // Check for configured Webhook
+    setIsProcessing(true);
+    
+    if (audioBlob.size === 0) {
+      setServerLog("Empty audio file, skipping.");
+      setIsProcessing(false);
+      return;
+    }
+
     const storedConfig = localStorage.getItem('southport_config');
     const config = storedConfig ? JSON.parse(storedConfig) : {};
     const webhookUrl = config.n8nWebhookAudio;
 
-    if (webhookUrl) {
-      try {
-        console.log("Uploading audio blob size:", audioBlob.size);
-        setServerLog(`Uploading ${audioBlob.size} bytes to n8n...`);
-        
-        if (audioBlob.size === 0) {
-             const msg = "Audio blob was empty, skipping upload";
-             console.warn(msg);
-             setServerLog(msg);
-             setIsProcessing(false);
-             return;
-        }
-
-        const formData = new FormData();
-        // FIELD NAME IS 'file' - Ensure n8n Webhook or Whisper node looks for 'file'
-        formData.append('file', audioBlob, `recording_${Date.now()}.webm`);
-        formData.append('timestamp', new Date().toISOString());
-        
-        // Fire and forget upload to n8n
-        const response = await fetch(webhookUrl, { method: 'POST', body: formData });
-        const text = await response.text();
-        
-        console.log("Webhook response:", text);
-        setServerLog(`n8n Response: ${text.substring(0, 100)}${text.length > 100 ? '...' : ''}`);
-
-        // Add a temporary optimistic log
-        const newLog: AudioLog = {
-          id: 'temp-' + Date.now(),
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          customerName: 'Processing...',
-          vehicle: 'Upload Sent',
-          duration: formatTime(recordingTime > 0 ? recordingTime : (segmentDuration * 60)),
-          transcriptPreview: "Audio sent to AI. Refresh shortly to see analysis.",
-          tags: ['Uploading'],
-          audioUrl: URL.createObjectURL(audioBlob)
-        };
-        
-        setLogs(prev => [newLog, ...prev]);
-        
-        // Poll for updates after 10 seconds
-        setTimeout(fetchLogs, 10000);
-        
-      } catch (error: any) {
-        console.error("Upload setup failed", error);
-        setServerLog(`Upload Error: ${error.message}`);
-        alert("Failed to upload audio to n8n. Check webhook URL.");
-      }
-    } else {
-      const msg = "Please configure n8n Webhook in Settings first.";
-      setServerLog(msg);
-      alert(msg);
+    if (!webhookUrl) {
+      setServerLog("No Webhook URL configured.");
+      setIsProcessing(false);
+      return;
     }
-    
-    setIsProcessing(false);
+
+    // Optimistic UI Update
+    const tempId = 'temp-' + Date.now();
+    const tempLog: AudioLog = {
+      id: tempId,
+      timestamp: new Date().toLocaleTimeString(),
+      customerName: 'Uploading...',
+      vehicle: 'Processing',
+      duration: '...',
+      transcriptPreview: 'Sending to AI...',
+      tags: ['Upload'],
+      audioUrl: ''
+    };
+    setLogs(prev => [tempLog, ...prev]);
+
+    try {
+      setServerLog(`Uploading ${audioBlob.size} bytes...`);
+      const formData = new FormData();
+      formData.append('file', audioBlob, `rec-${Date.now()}.webm`);
+      
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        body: formData
+      });
+
+      const text = await response.text();
+      
+      if (!response.ok) {
+        throw new Error(`Server Error: ${response.status} ${text}`);
+      }
+
+      setServerLog(`Success: ${text.substring(0, 50)}...`);
+      
+      // Poll for the real log
+      setTimeout(() => {
+        if (isMountedRef.current) fetchLogs();
+      }, 5000);
+
+    } catch (error: any) {
+      console.error("Upload failed", error);
+      setServerLog(`Error: ${error.message}`);
+      // Remove temp log on error
+      setLogs(prev => prev.filter(l => l.id !== tempId));
+    } finally {
+      if (isMountedRef.current) setIsProcessing(false);
+    }
   };
 
+  const handlePlayAudio = (url?: string) => {
+    if (!url) return;
+    try {
+      const audio = new Audio(url);
+      audio.play().catch(e => alert("Could not play audio: " + e.message));
+    } catch (e) {
+      console.error("Audio error", e);
+    }
+  };
+
+  // Helper
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const handleAssistantAsk = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!assistantQuery.trim()) return;
-    
-    setIsThinking(true);
-    const context = logs.slice(0, 10).map(l => `[${l.timestamp}] ${l.customerName}: ${l.transcriptPreview}`).join('\n');
-    
-    const response = await askAssistant(assistantQuery, context);
-    setAssistantResponse(response);
-    setIsThinking(false);
   };
 
   const filteredLogs = logs.filter(log => 
@@ -333,7 +380,7 @@ const AudioLogger: React.FC = () => {
               </button>
             ) : (
               <button 
-                onClick={startRecording}
+                onClick={startNewSegment}
                 disabled={isProcessing}
                 className={`w-full md:w-auto flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-bold text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg ${
                   isContinuous ? 'bg-purple-600 hover:bg-purple-500 shadow-purple-900/20' : 'bg-blue-600 hover:bg-blue-500 shadow-blue-900/20'
@@ -341,7 +388,7 @@ const AudioLogger: React.FC = () => {
               >
                 {isProcessing ? (
                   <>
-                    <UploadCloud size={20} className="animate-bounce" />
+                    <UploadCloud size={20} className="animate-spin" />
                     Processing...
                   </>
                 ) : (
@@ -363,7 +410,7 @@ const AudioLogger: React.FC = () => {
                    : 'bg-slate-900 border-slate-700 hover:border-slate-600'
                } ${isRecording ? 'opacity-50 cursor-not-allowed' : ''}`}
              >
-                <RefreshCw size={14} className={isContinuous ? "animate-spin-slow" : ""} />
+                <RefreshCw size={14} className={isContinuous ? "animate-spin" : ""} />
                 <span className="font-medium">Continuous Monitor Mode</span>
              </div>
              
@@ -435,10 +482,7 @@ const AudioLogger: React.FC = () => {
                </div>
                {selectedLog.audioUrl && (
                   <button 
-                    onClick={() => {
-                      const audio = new Audio(selectedLog.audioUrl);
-                      audio.play();
-                    }}
+                    onClick={() => handlePlayAudio(selectedLog.audioUrl)}
                     className="p-3 bg-blue-600 rounded-full hover:bg-blue-500 text-white shadow-lg transition-transform active:scale-95"
                   >
                     <Play size={20} fill="currentColor" />
@@ -473,7 +517,18 @@ const AudioLogger: React.FC = () => {
               <div>{assistantResponse}</div>
             </div>
           )}
-          <form onSubmit={handleAssistantAsk} className="relative">
+          <form 
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (!assistantQuery.trim()) return;
+              setIsThinking(true);
+              const context = logs.slice(0, 10).map(l => `[${l.timestamp}] ${l.customerName}: ${l.transcriptPreview}`).join('\n');
+              const response = await askAssistant(assistantQuery, context);
+              setAssistantResponse(response);
+              setIsThinking(false);
+            }} 
+            className="relative"
+          >
             <input 
               type="text" 
               value={assistantQuery}
