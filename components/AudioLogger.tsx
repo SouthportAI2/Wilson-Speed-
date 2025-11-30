@@ -311,8 +311,12 @@ const AudioLogger: React.FC = () => {
 
   const handlePlayAudio = (url?: string) => {
     if (!url) return;
-    const audio = new Audio(url);
-    audio.play().catch(e => alert("Playback error: " + e.message));
+    try {
+      const audio = new Audio(url);
+      audio.play().catch(e => alert("Playback error: " + e.message));
+    } catch (e) {
+      console.error("Audio playback error", e);
+    }
   };
 
   const formatTime = (seconds: number) => {
@@ -565,3 +569,4 @@ const AudioLogger: React.FC = () => {
 };
 
 export default AudioLogger;
+
