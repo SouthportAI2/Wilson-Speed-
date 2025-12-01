@@ -1,9 +1,8 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
 // Initialize Gemini Client
-// Using import.meta.env for Vite compatibility, with fallback to process.env
-const apiKey = (import.meta as any).env?.VITE_API_KEY || process.env.API_KEY || '';
-const ai = new GoogleGenAI({ apiKey });
+// The API key is injected via Vite's `define` config from process.env.API_KEY
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 // 1. Email Summaries Generator
 export const generateEmailSummaries = async (): Promise<any[]> => {
