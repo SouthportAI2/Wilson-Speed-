@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Mic, Search, Play, Square, UploadCloud, RefreshCw, Clock, FileText, Bot, Cpu, Wifi, WifiOff, AlertTriangle, Database, Terminal } from 'lucide-react';
 import { askAssistant } from '../services/gemini';
-import { getSupabaseClient } from '../services/Supabase';
+import { getSupabaseClient } from '../services/supabase';
 import { AudioLog } from '../types';
 
 const AudioLogger: React.FC = () => {
