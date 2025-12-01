@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Mic, Search, Play, Square, UploadCloud, RefreshCw, Clock, FileText, Bot, Cpu, Wifi, WifiOff, AlertTriangle, Database, Terminal } from 'lucide-react';
 import { askAssistant } from '../services/gemini';
-import { getSupabaseClient } from '../services/Supabase';
+import { getSupabaseClient } from '../services/supabase';
 import { AudioLog } from '../types';
 
 const AudioLogger: React.FC = () => {
@@ -102,8 +102,6 @@ const AudioLogger: React.FC = () => {
         setIsConnected(true);
         
         if (data) {
-          console.log(`📊 Fetched ${data.length} rows from Supabase`);
-          
           const formattedLogs: AudioLog[] = data.map(item => ({
             id: item.id,
             timestamp: new Date(item.created_at).toLocaleString(),
@@ -118,24 +116,22 @@ const AudioLogger: React.FC = () => {
           setLogs(prev => {
             const now = Date.now();
             
+            // Filter out expired temp logs
             const recentTempLogs = prev.filter(log => {
               if (!log.id.startsWith('temp-')) return false;
               const tempIdTimestamp = parseInt(log.id.replace('temp-', ''));
               const ageSeconds = (now - tempIdTimestamp) / 1000;
               
               if (ageSeconds >= 35) {
-                console.log(`🗑️ Removing expired temp log (age: ${ageSeconds.toFixed(1)}s)`);
                 return false;
               }
               return true;
             });
             
-            console.log(`✅ Merged: ${formattedLogs.length} real + ${recentTempLogs.length} temp = ${formattedLogs.length + recentTempLogs.length} total`);
-            
+            // Put REAL LOGS FIRST (most recent at top)
             const merged = [...formattedLogs, ...recentTempLogs];
             
-            setDebugInfo(`Sync Success. Rows: ${merged.length} (${formattedLogs.length} real, ${recentTempLogs.length} temp)`);
-            
+            setDebugInfo(`Sync Success. Rows: ${merged.length}`);
             return merged;
           });
         }
@@ -156,41 +152,30 @@ const AudioLogger: React.FC = () => {
     const supabase = getSupabaseClient();
     
     if (!supabase) {
-      console.error('❌ No Supabase client');
       alert('No Supabase client - check Settings');
       return;
     }
     
-    console.log('✅ Supabase client exists');
-
     try {
       const { data, error, count } = await supabase
         .from('audio_logs')
         .select('*', { count: 'exact' })
         .limit(10);
       
-      console.log('📊 SUPABASE RESPONSE:', { data, error, count });
-
       if (error) {
-        console.error('❌ Supabase error:', error);
-        alert(`Supabase Error: ${error.message}\n\nCheck console for details.`);
+        alert(`Supabase Error: ${error.message}`);
         return;
       }
       
       if (data && data.length > 0) {
-        console.log('✅ SUCCESS! Retrieved data:');
-        data.forEach((row, i) => {
-          console.log(`  ${i + 1}. ${row.customer_name} - ${row.vehicle}`);
-        });
-        alert(`SUCCESS! Found ${count} total records in database.\n\nRetrieved ${data.length} rows.\n\nCheck console for full details.`);
+        alert(`SUCCESS! Found ${data.length} records in DB. If you don't see them in the list, check the Console for RLS warnings.`);
+        console.log('Data:', data);
       } else {
-        console.warn('⚠️ Query succeeded but returned no data');
-        alert('Connected to Supabase, but no data found.');
+        alert('Connected, but table is empty. If you recorded something, check RLS policies.');
       }
       
     } catch (err: any) {
-      console.error('💥 Exception:', err);
-      alert(`Exception: ${err.message}\n\nCheck console for stack trace.`);
+      alert(`Exception: ${err.message}`);
     }
   };
 
@@ -213,15 +198,16 @@ const AudioLogger: React.FC = () => {
 
       recorder.onstop = async () => {
         const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-        chunksRef.current = [];
+        chunksRef.current = []; // Clear
         
         await handleUpload(blob);
 
         if (isMountedRef.current && isRecordingRef.current && isContinuousRef.current) {
-          console.log("🔄 Starting next continuous segment...");
+          console.log("Starting next continuous segment...");
           setRecordingTime(0);
-          startNewSegment();
+          startNewSegment(); // Recursion for next segment
         } else {
+          // Fully stop
           if (streamRef.current) {
             streamRef.current.getTracks().forEach(track => track.stop());
           }
@@ -267,6 +253,7 @@ const AudioLogger: React.FC = () => {
         if (!isMountedRef.current) return;
         setNextSplitIn(prev => {
           if (prev <= 1) {
+            // Trigger split
             if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
               mediaRecorderRef.current.stop();
             }
@@ -279,7 +266,7 @@ const AudioLogger: React.FC = () => {
   };
 
   const stopRecording = () => {
-    isRecordingRef.current = false;
+    isRecordingRef.current = false; // Prevent restart
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
       mediaRecorderRef.current.stop();
     } else {
@@ -308,6 +295,7 @@ const AudioLogger: React.FC = () => {
       return;
     }
 
+    // Optimistic Update - Temporary Log
     const tempId = 'temp-' + Date.now();
     const tempLog: AudioLog = {
       id: tempId,
@@ -319,13 +307,13 @@ const AudioLogger: React.FC = () => {
       tags: ['Upload'],
       audioUrl: ''
     };
-    
-    console.log(`📤 Creating temp log: ${tempId}`);
     setLogs(prev => [tempLog, ...prev]);
 
     try {
-      setServerLog(`Uploading ${(audioBlob.size / 1024).toFixed(1)} KB...`);
+      setServerLog(`Uploading ${audioBlob.size} bytes...`);
       const formData = new FormData();
+      
+      // Use 'file' as it is the standard for n8n webhook nodes
       formData.append('file', audioBlob, 'recording.webm'); 
 
       const response = await fetch(webhookUrl, {
@@ -342,10 +330,13 @@ const AudioLogger: React.FC = () => {
 
       setServerLog(`Upload Success! AI is analyzing...`);
       
+      // RETRY POLLING STRATEGY
+      // AI takes time (10-30s), so we check multiple times
+      // Temp logs older than 35 seconds will auto-expire in fetchLogs
       const poll = (delay: number, attempt: number) => {
         setTimeout(() => {
           if (isMountedRef.current) {
-            console.log(`🔍 Poll #${attempt} at ${delay}ms...`);
+            console.log(`Polling DB (attempt ${attempt}) at ${delay}ms...`);
             fetchLogs();
             if (attempt === 4) {
               setServerLog("Data synced from database");
@@ -354,14 +345,15 @@ const AudioLogger: React.FC = () => {
         }, delay);
       };
 
-      poll(5000, 1);
-      poll(10000, 2);
-      poll(20000, 3);
-      poll(30000, 4);
+      poll(5000, 1);   // 5s check
+      poll(10000, 2);  // 10s check  
+      poll(20000, 3);  // 20s check
+      poll(30000, 4);  // 30s final check
 
     } catch (error: any) {
       console.error("Upload Error:", error);
       setServerLog(`Upload Failed: ${error.message}`);
+      // Remove temp log on error
       setLogs(prev => prev.filter(l => l.id !== tempId));
     } finally {
       if (isMountedRef.current) setIsProcessing(false);
@@ -369,7 +361,10 @@ const AudioLogger: React.FC = () => {
   };
 
   const handlePlayAudio = (url?: string) => {
-    if (!url) return;
+    if (!url) {
+      alert("No audio file available for this log.");
+      return;
+    }
     try {
       const audio = new Audio(url);
       audio.play().catch(e => alert("Playback error: " + e.message));
@@ -403,8 +398,11 @@ const AudioLogger: React.FC = () => {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-200px)]">
+      {/* Left Column: List & Controls */}
       <div className="lg:col-span-2 flex flex-col gap-4">
+        {/* Control Panel */}
         <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 space-y-4 shadow-sm">
+          {/* Status Bar */}
           <div className="flex justify-between items-center text-xs text-slate-400">
             <div className="flex items-center gap-3">
               <span className={`flex items-center gap-1.5 px-2 py-1 rounded ${isConnected ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
@@ -428,6 +426,7 @@ const AudioLogger: React.FC = () => {
             </div>
           </div>
 
+          {/* Server Log Terminal */}
           <div className="bg-slate-950 border border-slate-800 p-2.5 rounded-lg font-mono text-[11px] text-green-400 flex gap-3 items-center overflow-hidden">
              <Terminal size={12} className="shrink-0 text-slate-500" />
              <span className="truncate">{serverLog}</span>
@@ -440,6 +439,7 @@ const AudioLogger: React.FC = () => {
              </div>
           )}
           
+          {/* Main Controls */}
           <div className="flex flex-col md:flex-row gap-4 items-center">
             <div className="relative flex-1 w-full">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
@@ -485,6 +485,7 @@ const AudioLogger: React.FC = () => {
             )}
           </div>
           
+          {/* Continuous Mode Toggle */}
           <div className="flex items-center justify-between text-sm pt-2">
              <div 
                onClick={() => !isRecording && setIsContinuous(!isContinuous)}
@@ -507,6 +508,7 @@ const AudioLogger: React.FC = () => {
           </div>
         </div>
 
+        {/* Logs List */}
         <div className="flex-1 bg-slate-800/50 rounded-xl border border-slate-700 overflow-y-auto p-4 space-y-3 custom-scrollbar">
           {filteredLogs.length > 0 ? (
             filteredLogs.map(log => (
@@ -547,11 +549,13 @@ const AudioLogger: React.FC = () => {
             <div className="h-full flex flex-col items-center justify-center text-slate-500 gap-3 opacity-60">
               <Database size={40} className="stroke-1" />
               <p className="text-sm">No audio logs found.</p>
+              {isConnected && <p className="text-[10px] text-yellow-500">Check RLS Permissions if you expect data.</p>}
             </div>
           )}
         </div>
       </div>
 
+      {/* Right Column: Assistant & Details */}
       <div className="bg-slate-800 rounded-xl border border-slate-700 flex flex-col overflow-hidden shadow-xl">
         {selectedLog ? (
           <div className="flex-1 p-6 overflow-y-auto">
@@ -560,14 +564,14 @@ const AudioLogger: React.FC = () => {
                  <h3 className="text-lg font-bold text-white">Transcript Details</h3>
                  <p className="text-slate-400 text-xs mt-1">ID: {selectedLog.id.substring(0,8)}</p>
                </div>
-               {selectedLog.audioUrl && (
-                  <button 
-                    onClick={() => handlePlayAudio(selectedLog.audioUrl)}
-                    className="p-3 bg-blue-600 rounded-full hover:bg-blue-500 text-white shadow-lg transition-transform active:scale-95"
-                  >
-                    <Play size={18} fill="currentColor" />
-                  </button>
-               )}
+               <button 
+                  onClick={() => handlePlayAudio(selectedLog.audioUrl)}
+                  className={`p-3 rounded-full shadow-lg transition-transform active:scale-95 ${selectedLog.audioUrl ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-slate-700 text-slate-500 cursor-not-allowed'}`}
+                  disabled={!selectedLog.audioUrl}
+                  title={selectedLog.audioUrl ? "Play Audio" : "Audio not available"}
+                >
+                  <Play size={18} fill="currentColor" />
+                </button>
              </div>
              
              <div className="space-y-6">
@@ -598,6 +602,7 @@ const AudioLogger: React.FC = () => {
           </div>
         )}
 
+        {/* Voice Assistant Chat */}
         <div className="p-4 bg-slate-900/80 border-t border-slate-700 backdrop-blur-sm">
           {assistantResponse && (
             <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg text-sm text-blue-200 animate-fade-in flex gap-3 shadow-inner">
