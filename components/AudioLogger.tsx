@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Mic, Search, Play, Square, UploadCloud, RefreshCw, Clock, FileText, Bot, Cpu, Wifi, WifiOff, AlertTriangle, Database, Terminal } from 'lucide-react';
 import { askAssistant } from '../services/gemini';
-import { getSupabaseClient } from '../services/supabase';
+import { getSupabaseClient } from '../services/Supabase';
 import { AudioLog } from '../types';
 
 const AudioLogger: React.FC = () => {
@@ -563,68 +563,4 @@ const AudioLogger: React.FC = () => {
                {selectedLog.audioUrl && (
                   <button 
                     onClick={() => handlePlayAudio(selectedLog.audioUrl)}
-                    className="p-3 bg-blue-600 rounded-full hover:bg-blue-500 text-white shadow-lg transition-transform active:scale-95"
-                  >
-                    <Play size={18} fill="currentColor" />
-                  </button>
-               )}
-             </div>
-             
-             <div className="space-y-6">
-               <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-800">
-                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Transcript</span>
-                  <p className="text-slate-300 leading-relaxed text-sm font-mono whitespace-pre-wrap">{selectedLog.transcriptPreview}</p>
-               </div>
-               
-               <div>
-                 <h4 className="text-sm font-bold text-white mb-3 flex items-center gap-2"><Cpu size={14} className="text-purple-400"/> AI Analysis</h4>
-                 <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-slate-700/30 p-3 rounded border border-slate-700">
-                      <div className="text-[10px] text-slate-500 uppercase">Customer</div>
-                      <div className="text-sm text-white font-medium truncate">{selectedLog.customerName}</div>
-                    </div>
-                    <div className="bg-slate-700/30 p-3 rounded border border-slate-700">
-                      <div className="text-[10px] text-slate-500 uppercase">Vehicle</div>
-                      <div className="text-sm text-white font-medium truncate">{selectedLog.vehicle}</div>
-                    </div>
-                 </div>
-               </div>
-             </div>
-          </div>
-        ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-slate-500 p-6 text-center">
-            <FileText size={48} className="mb-4 opacity-10" />
-            <p className="text-sm">Select a recording to view transcript and AI insights.</p>
-          </div>
-        )}
-
-        <div className="p-4 bg-slate-900/80 border-t border-slate-700 backdrop-blur-sm">
-          {assistantResponse && (
-            <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg text-sm text-blue-200 animate-fade-in flex gap-3 shadow-inner">
-              <Bot className="shrink-0 text-blue-400" size={18} />
-              <div className="leading-relaxed">{assistantResponse}</div>
-            </div>
-          )}
-          <form onSubmit={handleAssistantAsk} className="relative">
-            <input 
-              type="text" 
-              value={assistantQuery}
-              onChange={(e) => setAssistantQuery(e.target.value)}
-              placeholder="Ask AI about these logs..."
-              className="w-full bg-slate-800 border border-slate-600 rounded-lg pl-4 pr-12 py-3 text-sm text-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-            />
-            <button 
-              type="submit" 
-              disabled={isThinking}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-white transition-colors disabled:opacity-50"
-            >
-              {isThinking ? <div className="w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></div> : <Bot size={18} />}
-            </button>
-          </form>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-export default AudioLogger;
+                    className="p-3 bg-blue-600 rounded-full hover:bg-blue-5
