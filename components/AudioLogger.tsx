@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Mic, Search, Play, Square, UploadCloud, RefreshCw, Clock, FileText, Bot, Cpu, Wifi, WifiOff, AlertTriangle, Database, Terminal } from 'lucide-react';
 import { askAssistant } from '../services/gemini';
-import { getSupabaseClient } from '../services/services/supabaseClient';
+import { getSupabaseClient } from '../services/supabaseClient';
 import { AudioLog } from '../types';
 
 // ============================================================================
@@ -86,7 +86,7 @@ const useRecordingTimers = (
     // Start split timer if continuous mode
     if (isContinuous) {
       const splitSeconds = segmentDuration * 60;
-      setNextSplit(splitSeconds);
+      setNextSplit(() => splitSeconds);
 
       splitTimerRef.current = window.setInterval(() => {
         setNextSplit(prev => {
@@ -808,4 +808,3 @@ const AudioLogger: React.FC = () => {
 };
 
 export default AudioLogger;
-
