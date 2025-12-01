@@ -1,8 +1,20 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
-// Initialize Gemini Client
-// The API key is injected via Vite's `define` config from process.env.API_KEY
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Lazy initialization to prevent app crash if API key is missing on load
+let aiClient: GoogleGenAI | null = null;
+
+const getAiClient = (): GoogleGenAI => {
+  if (aiClient) return aiClient;
+  
+  // The API key is injected via Vite's `define` config from process.env.API_KEY
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) {
+    throw new Error("API_KEY not set. Please add API_KEY to your environment variables.");
+  }
+  
+  aiClient = new GoogleGenAI({ apiKey });
+  return aiClient;
+};
 
 // 1. Email Summaries Generator
 export const generateEmailSummaries = async (): Promise<any[]> => {
@@ -25,6 +37,7 @@ export const generateEmailSummaries = async (): Promise<any[]> => {
   }]`;
 
   try {
+    const ai = getAiClient();
     const response = await ai.models.generateContent({
       model,
       contents: prompt,
@@ -57,6 +70,7 @@ export const generateEmailSummaries = async (): Promise<any[]> => {
 export const askAssistant = async (query: string, context: string): Promise<string> => {
   const model = "gemini-2.5-flash";
   try {
+    const ai = getAiClient();
     const response = await ai.models.generateContent({
       model,
       contents: `You are a helpful AI assistant for Eric Wilson's auto shop. 
@@ -70,7 +84,7 @@ export const askAssistant = async (query: string, context: string): Promise<stri
     return response.text || "I'm sorry, I couldn't process that request.";
   } catch (error) {
     console.error("Assistant error:", error);
-    return "System error: Unable to reach AI assistant.";
+    return "System error: Unable to reach AI assistant. Please check API Key.";
   }
 };
 
@@ -78,6 +92,7 @@ export const askAssistant = async (query: string, context: string): Promise<stri
 export const generateSocialPost = async (topic: string, imageBase64?: string): Promise<string> => {
   const model = "gemini-2.5-flash";
   try {
+    const ai = getAiClient();
     let contents: any;
 
     if (imageBase64) {
@@ -122,7 +137,7 @@ export const generateSocialPost = async (topic: string, imageBase64?: string): P
     return response.text || "Could not generate post.";
   } catch (error) {
     console.error("Social gen error:", error);
-    return "Error generating content.";
+    return "Error generating content. Please check API Key.";
   }
 };
 
@@ -130,6 +145,7 @@ export const generateSocialPost = async (topic: string, imageBase64?: string): P
 export const generateReviewEmail = async (customerEmail: string): Promise<string> => {
   const model = "gemini-2.5-flash";
   try {
+    const ai = getAiClient();
     const response = await ai.models.generateContent({
       model,
       contents: `Write a polite, professional email to a customer (${customerEmail}) thanking them for visiting Southport AI Solutions.
@@ -140,6 +156,6 @@ export const generateReviewEmail = async (customerEmail: string): Promise<string
     return response.text || "Could not generate email.";
   } catch (error) {
     console.error("Review gen error:", error);
-    return "Error generating email.";
+    return "Error generating email. Please check API Key.";
   }
 };
