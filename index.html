@@ -1,174 +1,50 @@
-Code Analysis & Grade
-Overall Grade: B+ (85/100)
-This is a well-structured, production-ready React component with good practices, but has room for improvement in several areas.
-
-Strengths ✅
-1. Architecture & Organization (9/10)
-
-Excellent use of comments to separate concerns
-Custom hooks extracted appropriately
-Constants defined at top level
-Clean separation of state, refs, and handlers
-
-2. TypeScript Usage (8/10)
-
-Proper interfaces for complex state objects
-Type safety for most variables
-Good use of discriminated unions
-
-3. React Best Practices (8.5/10)
-
-Proper use of useCallback and useMemo to prevent re-renders
-Cleanup in useEffect return functions
-useRef for values that shouldn't trigger re-renders
-isMountedRef pattern prevents state updates on unmounted components
-
-4. User Experience (8/10)
-
-Responsive design (mobile/tablet/desktop)
-Optimistic updates with temp logs
-Visual feedback for all states
-Smooth animations and transitions
-
-
-Issues & Improvements Needed ⚠️
-1. Security Concerns (Critical) 🔴
-javascript// ISSUE: Sensitive data in localStorage
-const config = localStorage.getItem(CONFIG_KEY);
-
-// ISSUE: Webhook URL exposed client-side
-const webhookUrl = config.n8nWebhookAudio;
-Impact: API keys and webhooks could be intercepted
-Fix: Use environment variables, server-side proxy, or secure token management
-2. Memory Leaks 🟡
-javascriptconst handlePlayAudio = (url?: string) => {
-  const audio = new Audio(url);
-  audio.play(); // No cleanup or tracking
-};
-Fix:
-javascriptconst audioRef = useRef<HTMLAudioElement | null>(null);
-
-const handlePlayAudio = (url?: string) => {
-  audioRef.current?.pause();
-  audioRef.current = new Audio(url);
-  audioRef.current.play();
-};
-
-// Cleanup in useEffect
-3. Race Conditions 🟡
-javascript// Multiple polls can run simultaneously
-POLLING_SCHEDULE.forEach((delay) => {
-  setTimeout(() => fetchLogs(), delay);
-});
-Fix: Use AbortController and cancel previous requests
-4. Error Handling Inconsistency 🟡
-javascript// Some errors use alert()
-alert("Microphone error: " + msg);
-
-// Others update state
-setSystem(prev => ({ ...prev, serverLog: 'Error...' }));
-Fix: Unified error handling strategy with toast notifications
-5. Performance 🟡
-javascript// Search input causes re-render on every keystroke
-onChange={(e) => setSearchQuery(e.target.value)}
-Fix: Add debouncing:
-javascriptimport { useDebouncedCallback } from 'use-debounce';
-
-const debouncedSearch = useDebouncedCallback(
-  (value) => setSearchQuery(value),
-  300
-);
-6. Accessibility 🟡
-html<!-- Missing ARIA labels -->
-<button onClick={stopRecording}>
-  <Square size={18} /> {/* Icon-only, no label */}
-</button>
-Fix:
-html<button 
-  onClick={stopRecording}
-  aria-label="Stop recording"
->
-7. Component Size 🟡
-
-500+ lines - should be split into smaller components
-Suggested breakdown:
-
-RecordingControls.tsx
-LogsList.tsx
-LogDetails.tsx
-AssistantChat.tsx
-
-
-
-
-Detailed Scoring Breakdown
-CategoryScoreNotesCode Organization18/20Excellent structure, could split into smaller filesType Safety14/15Good TypeScript usage, missing some return typesReact Patterns17/20Proper hooks usage, but complex componentError Handling12/15Inconsistent approach, uses alertsPerformance13/15Good optimization, needs search debouncingSecurity6/10Critical: Exposed credentials in localStorageAccessibility7/10Missing ARIA labels, keyboard nav needs workTesting0/5No visible tests or testability considerations
-Total: 87/110 → Scaled to 85/100
-
-Priority Fixes (Ranked)
-🔴 High Priority
-
-Security: Move sensitive config to environment variables
-Memory Leaks: Track and cleanup audio elements
-Race Conditions: Implement request cancellation
-
-🟡 Medium Priority
-
-Component Splitting: Break into 4-5 smaller components
-Error Handling: Unified error boundary + toast system
-Accessibility: Add ARIA labels and keyboard navigation
-Performance: Debounce search input
-
-🟢 Low Priority
-
-Testing: Add unit tests for hooks and utilities
-Documentation: Add JSDoc comments for complex functions
-Type Strictness: Add explicit return types
-
-
-Recommended RefactorsDevised concrete refactoring example for code analysis.Let me provide a concrete example of how to refactor some of the problematic code.Example: Improved Audio Playback
-typescript// Create a custom hook
-const useAudioPlayer = () => {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  
-  const play = useCallback((url: string) => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = null;
-    }
-    
-    audioRef.current = new Audio(url);
-    return audioRef.current.play().catch(error => {
-      console.error('Playback failed:', error);
-      throw error;
-    });
-  }, []);
-  
-  const stop = useCallback(() => {
-    audioRef.current?.pause();
-    audioRef.current = null;
-  }, []);
-  
-  useEffect(() => {
-    return () => {
-      audioRef.current?.pause();
-      audioRef.current = null;
-    };
-  }, []);
-  
-  return { play, stop };
-};
-Example: Secure Configuration
-typescript// Instead of localStorage, use environment variables
-const config = {
-  webhookUrl: import.meta.env.VITE_WEBHOOK_URL,
-  // Or make requests through your own API endpoint
-};
-
-// Even better: proxy through your backend
-const uploadAudio = async (blob: Blob) => {
-  await fetch('/api/upload-audio', { // Your backend endpoint
-    method: 'POST',
-    body: blob
-  });
-};
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Southport AI - Eric Wilson</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+      body {
+        font-family: 'Inter', sans-serif;
+        background-color: #0f172a; /* Slate 900 */
+        color: #f8fafc; /* Slate 50 */
+      }
+      /* Custom scrollbar for webkit */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #1e293b; 
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #475569; 
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #64748b; 
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0",
+    "vite": "https://aistudiocdn.com/vite@^7.2.4",
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1",
+    "@supabase/supabase-js": "https://aistudiocdn.com/@supabase/supabase-js@^2.86.0"
+  }
+}
+</script>
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
