@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Mic, Search, Play, Square, UploadCloud, RefreshCw, Clock, FileText, Bot, Cpu, Wifi, WifiOff, AlertTriangle, Database, Terminal } from 'lucide-react';
+import { Mic, Search, Play, Square, UploadCloud, RefreshCw, Clock, FileText, Bot, Cpu, Wifi, WifiOff, AlertTriangle, Database, Terminal, VolumeX } from 'lucide-react';
 import { askAssistant } from '../services/gemini';
 import { getSupabaseClient } from '../services/supabaseClient';
 import { AudioLog } from '../types';
@@ -198,7 +198,7 @@ const AudioLogger: React.FC = () => {
     const supabase = getSupabaseClient();
 
     if (!supabase) {
-      const msg = "Missing API Keys in Settings";
+      const msg = "Missing API Keys";
       setSystem(prev => ({
         ...prev,
         dbError: msg,
@@ -234,7 +234,7 @@ const AudioLogger: React.FC = () => {
           const validTempLogs = prev.filter(log => !isExpiredTempLog(log.id));
           const merged = [...formattedLogs, ...validTempLogs];
 
-          setSystem(s => ({ ...s, isConnected: true, debugInfo: `Sync Success. Rows: ${merged.length}` }));
+          setSystem(s => ({ ...s, isConnected: true, debugInfo: `Synced. Rows: ${merged.length}` }));
           return merged;
         });
       }
@@ -441,7 +441,6 @@ const AudioLogger: React.FC = () => {
   // ========== HELPERS ==========
   const handlePlayAudio = useCallback((url?: string) => {
     if (!url) {
-      alert("No audio file available for this log.");
       return;
     }
     const audio = new Audio(url);
@@ -449,37 +448,6 @@ const AudioLogger: React.FC = () => {
       const msg = e instanceof Error ? e.message : 'Playback error';
       alert("Playback error: " + msg);
     });
-  }, []);
-
-  const handleTestSupabase = useCallback(async () => {
-    const supabase = getSupabaseClient();
-
-    if (!supabase) {
-      alert('No Supabase client - check Settings');
-      return;
-    }
-
-    try {
-      const { data, error } = await supabase
-        .from('audio_logs')
-        .select('*', { count: 'exact' })
-        .limit(10);
-
-      if (error) {
-        alert(`Supabase Error: ${error.message}`);
-        return;
-      }
-
-      if (data?.length) {
-        alert(`SUCCESS! Found ${data.length} records in DB.`);
-        console.log('Data:', data);
-      } else {
-        alert('Connected, but table is empty. Check RLS policies.');
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Unknown error';
-      alert(`Exception: ${msg}`);
-    }
   }, []);
 
   // ========== COMPUTED VALUES ==========
@@ -517,11 +485,13 @@ const AudioLogger: React.FC = () => {
 
   // ========== RENDER ==========
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-200px)]">
+    // Responsive grid: Stacked on mobile/tablet (h-auto), Side-by-side on large screens (fixed height)
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-auto lg:h-[calc(100vh-12rem)]">
       {/* Left Column: List & Controls */}
-      <div className="lg:col-span-2 flex flex-col gap-4">
+      {/* Fixed height on mobile (500px) to allow internal scrolling, auto/flex height on desktop */}
+      <div className="lg:col-span-2 flex flex-col gap-4 h-[600px] lg:h-auto">
         {/* Control Panel */}
-        <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 space-y-4 shadow-sm">
+        <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 space-y-4 shadow-sm shrink-0">
           {/* Status Bar */}
           <div className="flex justify-between items-center text-xs text-slate-400">
             <div className="flex items-center gap-3">
@@ -538,21 +508,12 @@ const AudioLogger: React.FC = () => {
               <span className="font-mono opacity-50 hidden sm:inline">{system.debugInfo}</span>
             </div>
 
-            <div className="flex gap-2">
-              <button
-                onClick={handleTestSupabase}
-                className="hover:text-yellow-400 text-yellow-500 flex items-center gap-1 font-bold bg-yellow-500/10 px-2 py-1 rounded border border-yellow-500/30 text-[10px]"
-              >
-                🧪 TEST DB
-              </button>
-
-              <button
-                onClick={fetchLogs}
-                className="hover:text-white flex items-center gap-1 transition-colors"
-              >
-                <RefreshCw size={12} /> Refresh
-              </button>
-            </div>
+            <button
+              onClick={fetchLogs}
+              className="hover:text-white flex items-center gap-1 transition-colors"
+            >
+              <RefreshCw size={12} /> Refresh
+            </button>
           </div>
 
           {/* Server Log Terminal */}
@@ -682,7 +643,7 @@ const AudioLogger: React.FC = () => {
                   <div className="text-slate-500 text-xs font-mono">{log.duration}</div>
                 </div>
                 <p className="text-slate-400 text-sm line-clamp-2 leading-relaxed">
-                  {log.transcriptPreview}
+                  {log.transcriptPreview || <span className="italic opacity-50">No transcript available</span>}
                 </p>
                 {log.tags && log.tags.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 mt-3">
@@ -711,7 +672,8 @@ const AudioLogger: React.FC = () => {
       </div>
 
       {/* Right Column: Assistant & Details */}
-      <div className="bg-slate-800 rounded-xl border border-slate-700 flex flex-col overflow-hidden shadow-xl">
+      {/* Fixed height on mobile (500px), auto/flex on desktop */}
+      <div className="bg-slate-800 rounded-xl border border-slate-700 flex flex-col overflow-hidden shadow-xl h-[500px] lg:h-auto">
         {selectedLog ? (
           <div className="flex-1 p-6 overflow-y-auto">
             <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-700">
@@ -726,22 +688,30 @@ const AudioLogger: React.FC = () => {
                 className={`p-3 rounded-full shadow-lg transition-transform active:scale-95 ${
                   selectedLog.audioUrl
                     ? 'bg-blue-600 hover:bg-blue-500 text-white'
-                    : 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                    : 'bg-slate-700 text-slate-500 cursor-not-allowed opacity-50'
                 }`}
                 disabled={!selectedLog.audioUrl}
                 title={selectedLog.audioUrl ? 'Play Audio' : 'Audio not available'}
               >
-                <Play size={18} fill="currentColor" />
+                {selectedLog.audioUrl ? (
+                  <Play size={18} fill="currentColor" />
+                ) : (
+                  <VolumeX size={18} />
+                )}
               </button>
             </div>
 
             <div className="space-y-6">
-              <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-800">
+              <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-800 min-h-[100px]">
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">
                   Transcript
                 </span>
                 <p className="text-slate-300 leading-relaxed text-sm font-mono whitespace-pre-wrap">
-                  {selectedLog.transcriptPreview}
+                  {selectedLog.transcriptPreview ? (
+                     selectedLog.transcriptPreview
+                  ) : (
+                     <span className="text-slate-600 italic">No transcript content available for this record.</span>
+                  )}
                 </p>
               </div>
 
@@ -774,7 +744,7 @@ const AudioLogger: React.FC = () => {
         )}
 
         {/* Voice Assistant Chat */}
-        <div className="p-4 bg-slate-900/80 border-t border-slate-700 backdrop-blur-sm">
+        <div className="p-4 bg-slate-900/80 border-t border-slate-700 backdrop-blur-sm shrink-0">
           {assistant.response && (
             <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg text-sm text-blue-200 animate-fade-in flex gap-3 shadow-inner">
               <Bot className="shrink-0 text-blue-400" size={18} />
@@ -787,7 +757,7 @@ const AudioLogger: React.FC = () => {
               value={assistant.query}
               onChange={(e) => setAssistant(prev => ({ ...prev, query: e.target.value }))}
               placeholder="Ask AI about these logs..."
-              className="w-full bg-slate-800 border border-slate-600 rounded-lg pl-4 pr-12 py-3 text-sm text-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+              className="w-full bg-slate-800 border border-slate-600 rounded-lg pl-4 pr-12 py-3 text-sm text-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all placeholder:text-slate-500"
             />
             <button
               type="submit"
