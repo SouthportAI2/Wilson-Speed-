@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Mic, Search, Play, Square, UploadCloud, RefreshCw, Clock, FileText, Bot, Cpu, Wifi, WifiOff, AlertTriangle, Database, Terminal, VolumeX } from 'lucide-react';
+import { Mic, Search, Play, Square, UploadCloud, RefreshCw, Clock, FileText, Bot, Cpu, WifiOff, AlertTriangle, Database, Terminal, VolumeX } from 'lucide-react';
 import { askAssistant } from '../services/gemini';
 import { getSupabaseClient } from '../services/supabaseClient';
 import { AudioLog } from '../types';
@@ -26,7 +26,6 @@ interface SystemState {
   isProcessing: boolean;
   isConnected: boolean;
   dbError: string | null;
-  debugInfo: string;
   serverLog: string;
 }
 
@@ -153,8 +152,7 @@ const AudioLogger: React.FC = () => {
     isProcessing: false,
     isConnected: false,
     dbError: null,
-    debugInfo: '',
-    serverLog: 'Ready for upload...',
+    serverLog: '',
   });
 
   const [assistant, setAssistant] = useState<AssistantState>({
@@ -194,7 +192,7 @@ const AudioLogger: React.FC = () => {
   const fetchLogs = useCallback(async () => {
     if (!isMountedRef.current) return;
 
-    setSystem(prev => ({ ...prev, dbError: null, debugInfo: 'Connecting to DB...' }));
+    setSystem(prev => ({ ...prev, dbError: null }));
     const supabase = getSupabaseClient();
 
     if (!supabase) {
@@ -202,7 +200,6 @@ const AudioLogger: React.FC = () => {
       setSystem(prev => ({
         ...prev,
         dbError: msg,
-        debugInfo: msg,
         isConnected: false,
       }));
       return;
@@ -234,7 +231,7 @@ const AudioLogger: React.FC = () => {
           const validTempLogs = prev.filter(log => !isExpiredTempLog(log.id));
           const merged = [...formattedLogs, ...validTempLogs];
 
-          setSystem(s => ({ ...s, isConnected: true, debugInfo: `Synced. Rows: ${merged.length}` }));
+          setSystem(s => ({ ...s, isConnected: true }));
           return merged;
         });
       }
@@ -246,7 +243,6 @@ const AudioLogger: React.FC = () => {
           ...prev,
           isConnected: false,
           dbError: msg,
-          debugInfo: `DB Error: ${msg}`,
         }));
       }
     }
@@ -329,7 +325,7 @@ const AudioLogger: React.FC = () => {
           if (isMountedRef.current) {
             fetchLogs();
             if (index === POLLING_SCHEDULE.length - 1) {
-              setSystem(s => ({ ...s, serverLog: 'Data synced from database' }));
+              setSystem(s => ({ ...s, serverLog: 'Recording processed' }));
             }
           }
         }, delay);
@@ -463,6 +459,10 @@ const AudioLogger: React.FC = () => {
     [logs, searchQuery]
   );
 
+  const shouldShowTerminal = useMemo(() => {
+    return recording.isRecording || system.isProcessing || system.serverLog.toLowerCase().includes('error');
+  }, [recording.isRecording, system.isProcessing, system.serverLog]);
+
   // ========== LIFECYCLE ==========
   useEffect(() => {
     isMountedRef.current = true;
@@ -492,20 +492,16 @@ const AudioLogger: React.FC = () => {
       <div className="lg:col-span-2 flex flex-col gap-4 h-[600px] lg:h-auto">
         {/* Control Panel */}
         <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 space-y-4 shadow-sm shrink-0">
-          {/* Status Bar */}
+          {/* Status Bar - Simplified */}
           <div className="flex justify-between items-center text-xs text-slate-400">
             <div className="flex items-center gap-3">
-              <span
-                className={`flex items-center gap-1.5 px-2 py-1 rounded ${
-                  system.isConnected
-                    ? 'bg-green-500/10 text-green-400'
-                    : 'bg-red-500/10 text-red-400'
-                }`}
-              >
-                {system.isConnected ? <Wifi size={12} /> : <WifiOff size={12} />}
-                {system.isConnected ? 'DB Connected' : 'DB Offline'}
-              </span>
-              <span className="font-mono opacity-50 hidden sm:inline">{system.debugInfo}</span>
+              {/* Only show DB Offline badge when there's an error or not connected */}
+              {!system.isConnected && (
+                <span className="flex items-center gap-1.5 px-2 py-1 rounded bg-red-500/10 text-red-400">
+                  <WifiOff size={12} />
+                  DB Offline
+                </span>
+              )}
             </div>
 
             <button
@@ -516,11 +512,13 @@ const AudioLogger: React.FC = () => {
             </button>
           </div>
 
-          {/* Server Log Terminal */}
-          <div className="bg-slate-950 border border-slate-800 p-2.5 rounded-lg font-mono text-[11px] text-green-400 flex gap-3 items-center overflow-hidden">
-            <Terminal size={12} className="shrink-0 text-slate-500" />
-            <span className="truncate">{system.serverLog}</span>
-          </div>
+          {/* Server Log Terminal - Conditional Display */}
+          {shouldShowTerminal && (
+            <div className="bg-slate-950 border border-slate-800 p-2.5 rounded-lg font-mono text-[11px] text-green-400 flex gap-3 items-center overflow-hidden animate-fade-in">
+              <Terminal size={12} className="shrink-0 text-slate-500" />
+              <span className="truncate">{system.serverLog}</span>
+            </div>
+          )}
 
           {system.dbError && (
             <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-lg text-xs flex items-center gap-2">
