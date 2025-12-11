@@ -7,6 +7,7 @@ const Settings: React.FC = () => {
     n8nWebhookEmail: '',
     n8nWebhookSocial: '',
     n8nWebhookAudio: '',
+    n8nWebhookReview: '',
     retellApiKey: '',
     supabaseUrl: '',
     supabaseKey: '',
@@ -78,6 +79,17 @@ const Settings: React.FC = () => {
                   value={config.n8nWebhookAudio}
                   onChange={handleChange}
                   placeholder="https://your-n8n-instance.com/webhook/audio-upload"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm text-white focus:border-blue-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Review Request Webhook (POST)</label>
+                <input 
+                  type="text" 
+                  name="n8nWebhookReview"
+                  value={config.n8nWebhookReview}
+                  onChange={handleChange}
+                  placeholder="https://your-n8n-instance.com/webhook/send-review"
                   className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm text-white focus:border-blue-500 focus:outline-none"
                 />
               </div>
