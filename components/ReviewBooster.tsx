@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Star, Send, User, Check, Mail } from 'lucide-react';
 import { generateReviewEmail } from '../services/gemini';
@@ -12,15 +13,41 @@ const ReviewBooster: React.FC = () => {
     if (!email) return;
     setStatus('GENERATING');
     
-    // Simulate API call to Gemini
-    const result = await generateReviewEmail(email);
-    setPreview(result);
-    
-    // Simulate sending delay
-    setTimeout(() => {
+    try {
+      // 1. Generate Content via Gemini
+      const result = await generateReviewEmail(email);
+      setPreview(result);
+
+      // 2. Send via Webhook (if configured)
+      const storedConfig = localStorage.getItem('southport_config');
+      const config = storedConfig ? JSON.parse(storedConfig) : {};
+
+      if (config.n8nWebhookReview) {
+         const response = await fetch(config.n8nWebhookReview, {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ 
+               email, 
+               content: result,
+               timestamp: new Date().toISOString()
+             })
+         });
+         
+         if (!response.ok) {
+           console.warn('Webhook failed, falling back to simulation UI');
+         }
+      } else {
+         // Fallback delay if no webhook to simulate processing
+         await new Promise(resolve => setTimeout(resolve, 1500));
+      }
+
       setStatus('SENT');
-      // In a real app, this is where backend email service would be called
-    }, 2000);
+    } catch (error) {
+      console.error("Error processing review request:", error);
+      // Fallback to showing generated content even if upload failed, 
+      // so user can copy/paste it manually
+      setStatus('SENT'); 
+    }
   };
 
   const reset = () => {
@@ -45,8 +72,8 @@ const ReviewBooster: React.FC = () => {
              <div className="w-16 h-16 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
                <Check className="text-green-500" size={32} />
              </div>
-             <h4 className="text-xl font-bold text-white mb-2">Request Sent!</h4>
-             <p className="text-slate-400 mb-6">The email has been delivered to {email}.</p>
+             <h4 className="text-xl font-bold text-white mb-2">Request Processed!</h4>
+             <p className="text-slate-400 mb-6">The review request has been generated for {email}.</p>
              <div className="bg-slate-900 p-4 rounded-lg text-left text-sm text-slate-300 mb-6 whitespace-pre-wrap border border-slate-800">
                {preview}
              </div>
