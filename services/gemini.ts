@@ -1,161 +1,61 @@
-import { GoogleGenAI, Type } from "@google/genai";
 
-// Lazy initialization to prevent app crash if API key is missing on load
-let aiClient: GoogleGenAI | null = null;
-
-const getAiClient = (): GoogleGenAI => {
-  if (aiClient) return aiClient;
-  
-  // The API key is injected via Vite's `define` config from process.env.API_KEY
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    throw new Error("API_KEY not set. Please add API_KEY to your environment variables.");
-  }
-  
-  aiClient = new GoogleGenAI({ apiKey });
-  return aiClient;
-};
-
-// 1. Email Summaries Generator
-export const generateEmailSummaries = async (): Promise<any[]> => {
-  const model = "gemini-2.5-flash";
-  const prompt = `Generate 5 realistic email summaries for an auto repair shop owner named Eric. 
-  The emails should appear to be from 'Yahoo Mail'.
-  Include a mix of:
-  - Customer requests (appointments, issues)
-  - Parts updates (deliveries, delays)
-  - Action items (approvals needed)
-  
-  Return the response in JSON format matching this schema:
-  [{
-    "id": "string",
-    "sender": "string",
-    "subject": "string",
-    "summary": "string (max 2 sentences)",
-    "category": "URGENT" | "CUSTOMER" | "PARTS" | "ADMIN",
-    "timestamp": "string (e.g. 'Today, 9:15 AM')"
-  }]`;
-
-  try {
-    const ai = getAiClient();
-    const response = await ai.models.generateContent({
-      model,
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              id: { type: Type.STRING },
-              sender: { type: Type.STRING },
-              subject: { type: Type.STRING },
-              summary: { type: Type.STRING },
-              category: { type: Type.STRING, enum: ["URGENT", "CUSTOMER", "PARTS", "ADMIN"] },
-              timestamp: { type: Type.STRING }
-            }
-          }
-        }
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Southport AI - Eric Wilson</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+      body {
+        font-family: 'Inter', sans-serif;
+        background-color: #0f172a; /* Slate 900 */
+        color: #f8fafc; /* Slate 50 */
+        margin: 0;
+        min-height: 100vh;
       }
-    });
-    return response.text ? JSON.parse(response.text) : [];
-  } catch (error) {
-    console.error("Error generating emails:", error);
-    return [];
+      /* Custom scrollbar for webkit */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #1e293b; 
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #475569; 
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #64748b; 
+      }
+      @keyframes fade-in {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .animate-fade-in {
+        animation: fade-in 0.6s ease-out forwards;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0",
+    "react": "https://aistudiocdn.com/react@^19.2.1",
+    "react/": "https://aistudiocdn.com/react@^19.2.1/",
+    "react-dom": "https://aistudiocdn.com/react-dom@^19.2.1",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.31.0",
+    "@supabase/supabase-js": "https://aistudiocdn.com/@supabase/supabase-js@^2.86.0",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
+    "vite": "https://esm.sh/vite@^7.3.0"
   }
-};
-
-// 2. Audio Log Search / Assistant
-export const askAssistant = async (query: string, context: string): Promise<string> => {
-  const model = "gemini-2.5-flash";
-  try {
-    const ai = getAiClient();
-    const response = await ai.models.generateContent({
-      model,
-      contents: `You are a helpful AI assistant for Eric Wilson's auto shop. 
-      You have access to the following audio log context (transcripts):
-      ${context}
-      
-      User Query: "${query}"
-      
-      Provide a concise, helpful verbal-style response.`,
-    });
-    return response.text || "I'm sorry, I couldn't process that request.";
-  } catch (error) {
-    console.error("Assistant error:", error);
-    return "System error: Unable to reach AI assistant. Please check API Key.";
-  }
-};
-
-// 3. Social Media Post Generator
-export const generateSocialPost = async (topic: string, imageBase64?: string): Promise<string> => {
-  const model = "gemini-2.5-flash";
-  try {
-    const ai = getAiClient();
-    let contents: any;
-
-    if (imageBase64) {
-      // Extract base64 data and mime type
-      const mimeType = imageBase64.includes('data:') 
-        ? imageBase64.split(';')[0].split(':')[1] 
-        : 'image/jpeg';
-      const base64Data = imageBase64.includes('base64,') 
-        ? imageBase64.split('base64,')[1] 
-        : imageBase64;
-
-      contents = {
-        parts: [
-          {
-            inlineData: {
-              mimeType: mimeType,
-              data: base64Data
-            }
-          },
-          {
-            text: `Write a high-quality, engaging social media post (Facebook/Instagram) for Southport AI Solutions (Auto Shop).
-            Topic/Context: ${topic}
-            Tone: Professional, expert, yet friendly.
-            Analyze the attached image and incorporate it into the post description if relevant.
-            Include hashtags. 
-            Format: Plain text with emojis.`
-          }
-        ]
-      };
-    } else {
-      contents = `Write a high-quality, engaging social media post (Facebook/Instagram) for Southport AI Solutions (Auto Shop).
-      Topic: ${topic}
-      Tone: Professional, expert, yet friendly.
-      Include hashtags. 
-      Format: Plain text with emojis.`;
-    }
-
-    const response = await ai.models.generateContent({
-      model,
-      contents,
-    });
-    return response.text || "Could not generate post.";
-  } catch (error) {
-    console.error("Social gen error:", error);
-    return "Error generating content. Please check API Key.";
-  }
-};
-
-// 4. Review Email Generator
-export const generateReviewEmail = async (customerEmail: string): Promise<string> => {
-  const model = "gemini-2.5-flash";
-  try {
-    const ai = getAiClient();
-    const response = await ai.models.generateContent({
-      model,
-      contents: `Write a polite, professional email to a customer (${customerEmail}) thanking them for visiting Southport AI Solutions.
-      Ask them to leave a Google Review if they were satisfied.
-      Include a placeholder link [LINK_TO_GOOGLE_PROFILE].
-      Keep it brief and personal. Sign off as Eric Wilson.`,
-    });
-    return response.text || "Could not generate email.";
-  } catch (error) {
-    console.error("Review gen error:", error);
-    return "Error generating email. Please check API Key.";
-  }
-};
+}
+</script>
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
