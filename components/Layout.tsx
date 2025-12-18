@@ -12,9 +12,9 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children, currentView, onNavigate, title }) => {
   return (
-    <div className="min-h-screen bg-[#0a0f18] text-slate-100 flex flex-col selection:bg-orange-500/30">
+    <div className="min-h-screen bg-[#05070a] text-slate-100 flex flex-col selection:bg-orange-600/30">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-[#0f172a]/95 backdrop-blur-md border-b border-slate-800 p-4 shadow-2xl">
+      <header className="sticky top-0 z-50 bg-[#0a0f18]/95 backdrop-blur-md border-b border-slate-800 p-4 shadow-2xl">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
             {currentView !== ViewState.DASHBOARD && (
@@ -26,34 +26,34 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onNavigate, titl
               </button>
             )}
             <div className="group cursor-pointer" onClick={() => onNavigate(ViewState.DASHBOARD)}>
-              <h1 className="text-xl font-black tracking-tighter bg-gradient-to-r from-slate-200 via-slate-400 to-slate-500 bg-clip-text text-transparent group-hover:from-orange-400 group-hover:to-orange-600 transition-all uppercase">
+              <h1 className="text-xl font-black tracking-tighter bg-gradient-to-r from-slate-100 via-slate-400 to-slate-500 bg-clip-text text-transparent group-hover:from-orange-500 group-hover:to-orange-700 transition-all uppercase">
                 Eric Wilsons AI
               </h1>
               <div className="flex items-center gap-1.5">
-                <ShieldCheck size={10} className="text-orange-600" />
-                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Master Control Core</p>
+                <ShieldCheck size={10} className="text-orange-700" />
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Heavy Duty Intel</p>
               </div>
             </div>
           </div>
           <div className="flex items-center gap-3">
              <div className="hidden md:flex flex-col items-end mr-2">
-                <span className="text-sm font-black text-slate-200 uppercase tracking-tighter">Eric Wilson</span>
+                <span className="text-sm font-black text-slate-100 uppercase tracking-tighter">Eric Wilson</span>
                 <div className="flex items-center gap-1">
                   <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-600 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-600"></span>
                   </span>
-                  <span className="text-[10px] font-bold text-orange-500 uppercase tracking-tighter">System Hot</span>
+                  <span className="text-[10px] font-black text-orange-600 uppercase tracking-tighter">System Redline</span>
                 </div>
              </div>
              <button 
                onClick={() => onNavigate(ViewState.SETTINGS)}
-               className={`p-2.5 rounded-xl transition-all duration-300 ${currentView === ViewState.SETTINGS ? 'bg-orange-600 shadow-lg shadow-orange-900/40 text-white' : 'bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white border border-slate-700/50'}`}
+               className={`p-2.5 rounded-xl transition-all duration-300 ${currentView === ViewState.SETTINGS ? 'bg-orange-700 shadow-lg shadow-orange-950/40 text-white' : 'bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white border border-slate-700/50'}`}
              >
                 <Settings size={20} />
              </button>
-             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-700 via-slate-800 to-black flex items-center justify-center shadow-lg border border-slate-700 ring-2 ring-slate-900">
-                <User size={20} className="text-slate-300" />
+             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-800 via-slate-900 to-black flex items-center justify-center shadow-lg border border-slate-700 ring-2 ring-slate-900">
+                <User size={20} className="text-slate-400" />
              </div>
           </div>
         </div>
@@ -66,7 +66,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onNavigate, titl
             <h2 className="text-3xl md:text-4xl font-black tracking-tight text-white mb-3 uppercase">
               {title}
             </h2>
-            <div className="h-1.5 w-24 bg-gradient-to-r from-orange-600 to-red-800 rounded-full"></div>
+            <div className="h-1.5 w-24 bg-gradient-to-r from-orange-700 to-red-900 rounded-full"></div>
           </div>
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
             {children}
@@ -75,13 +75,13 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onNavigate, titl
       </main>
       
       {/* Footer */}
-      <footer className="border-t border-slate-800/50 p-8 mt-12 bg-black/40">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4 text-slate-500 text-xs font-bold uppercase tracking-widest">
+      <footer className="border-t border-slate-800/50 p-8 mt-12 bg-black/60">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4 text-slate-600 text-xs font-black uppercase tracking-widest">
           <p>© {new Date().getFullYear()} ERIC WILSONS PERSON AI INFRASTRUCTURE</p>
           <div className="flex gap-6">
-            <span className="hover:text-orange-500 cursor-pointer transition-colors">Documentation</span>
-            <span className="hover:text-orange-500 cursor-pointer transition-colors">Support</span>
-            <span className="text-slate-700">V1.0.4-RUGGED</span>
+            <span className="hover:text-orange-600 cursor-pointer transition-colors">Tactical Docs</span>
+            <span className="hover:text-orange-600 cursor-pointer transition-colors">Support</span>
+            <span className="text-slate-800">V1.0.5-INDUSTRIAL</span>
           </div>
         </div>
       </footer>
