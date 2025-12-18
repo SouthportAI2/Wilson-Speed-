@@ -1,5 +1,6 @@
+
 import React from 'react';
-import { LucideIcon } from 'lucide-react';
+import { LucideIcon, ChevronRight } from 'lucide-react';
 
 interface DashboardCardProps {
   title: string;
@@ -7,36 +8,35 @@ interface DashboardCardProps {
   icon: LucideIcon;
   onClick: () => void;
   color: string;
+  iconColor: string;
 }
 
-const DashboardCard: React.FC<DashboardCardProps> = ({ title, description, icon: Icon, onClick, color }) => {
+const DashboardCard: React.FC<DashboardCardProps> = ({ title, description, icon: Icon, onClick, color, iconColor }) => {
   return (
     <button 
       onClick={onClick}
-      className="group relative flex flex-col items-start text-left bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-xl hover:shadow-2xl hover:border-slate-600 transition-all duration-300 hover:-translate-y-1 overflow-hidden w-full h-full"
+      className={`group relative flex flex-col items-start text-left bg-slate-900/80 border-4 ${color} p-8 transition-all hover:bg-slate-900 hover:border-orange-600 w-full h-full min-h-[350px]`}
     >
-      <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-br ${color} opacity-5 rounded-bl-full transition-opacity group-hover:opacity-10`} />
-      
-      <div className={`p-4 rounded-xl bg-slate-900/50 border border-slate-700/50 mb-6 ${color.replace('from-', 'text-').split(' ')[0]}`}>
+      <div className={`p-4 bg-black/50 border-2 border-slate-800 mb-8 group-hover:border-orange-600 transition-all ${iconColor}`}>
         <Icon size={32} />
       </div>
 
-      <h3 className="text-xl font-bold text-white mb-4 group-hover:text-blue-400 transition-colors">
+      <h3 className="text-2xl font-[900] text-white mb-6 uppercase tracking-tighter">
         {title}
       </h3>
 
-      <ul className="space-y-2 mb-4 flex-1">
-        {description.slice(0, 3).map((item, index) => (
-          <li key={index} className="flex items-start text-sm text-slate-400">
-            <span className="mr-2 mt-1.5 w-1 h-1 bg-slate-500 rounded-full flex-shrink-0" />
-            <span className="line-clamp-2">{item}</span>
-          </li>
+      <div className="space-y-4 mb-8 flex-1">
+        {description.map((item, index) => (
+          <div key={index} className="flex items-start text-xs text-slate-400 font-black uppercase tracking-widest leading-tight">
+            <span className="mr-3 text-orange-600 font-black">//</span>
+            <span>{item}</span>
+          </div>
         ))}
-      </ul>
+      </div>
 
-      <div className="mt-auto w-full pt-4 border-t border-slate-700/50 flex justify-between items-center text-sm font-medium text-slate-500 group-hover:text-white transition-colors">
-        <span>Open Module</span>
-        <span className="text-lg">→</span>
+      <div className="mt-auto w-full pt-4 border-t-2 border-slate-800 flex justify-between items-center text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 group-hover:text-orange-600 transition-colors">
+        <span>Engage Interface</span>
+        <ChevronRight size={16} className="group-hover:translate-x-1 transition-transform" />
       </div>
     </button>
   );
