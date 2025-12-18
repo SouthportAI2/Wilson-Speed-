@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Mic, Search, Play, Square, UploadCloud, RefreshCw, Clock, FileText, Bot, Cpu, WifiOff, AlertTriangle, Database, Terminal, VolumeX } from 'lucide-react';
 import { askAssistant } from '../services/gemini';
@@ -128,6 +129,17 @@ const isExpiredTempLog = (logId: string): boolean => {
   return ageSeconds >= TEMP_LOG_EXPIRY_SECONDS;
 };
 
+const formatIncomingLog = (item: any): AudioLog => ({
+  id: item.id,
+  timestamp: new Date(item.created_at).toLocaleString(),
+  customerName: item.customer_name || 'Unknown',
+  vehicle: item.vehicle || 'General Shop',
+  duration: 'Recorded',
+  transcriptPreview: item.transcript || item.summary || 'Processing...',
+  tags: item.tags || [],
+  audioUrl: item.audio_url,
+});
+
 // ============================================================================
 // MAIN COMPONENT
 // ============================================================================
@@ -139,6 +151,7 @@ const AudioLogger: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [logs, setLogs] = useState<AudioLog[]>([]);
   const [selectedLog, setSelectedLog] = useState<AudioLog | null>(null);
+  const [lastInsertedId, setLastInsertedId] = useState<string | null>(null);
 
   // Consolidated state objects
   const [recording, setRecording] = useState<RecordingState>({
@@ -149,6 +162,7 @@ const AudioLogger: React.FC = () => {
   });
 
   const [system, setSystem] = useState<SystemState>({
+    // Fixed: Removed invalid type keywords in object literal
     isProcessing: false,
     isConnected: false,
     dbError: null,
@@ -196,7 +210,7 @@ const AudioLogger: React.FC = () => {
     const supabase = getSupabaseClient();
 
     if (!supabase) {
-      const msg = "Missing API Keys";
+      const msg = "Missing API Keys in Settings";
       setSystem(prev => ({
         ...prev,
         dbError: msg,
@@ -215,24 +229,19 @@ const AudioLogger: React.FC = () => {
       if (error) throw error;
 
       if (isMountedRef.current && data) {
-        const formattedLogs: AudioLog[] = data.map(item => ({
-          id: item.id,
-          timestamp: new Date(item.created_at).toLocaleString(),
-          customerName: item.customer_name || 'Unknown',
-          vehicle: item.vehicle || 'General Shop',
-          duration: 'Recorded',
-          transcriptPreview: item.transcript || item.summary || 'Processing...',
-          tags: item.tags || [],
-          audioUrl: item.audio_url,
-        }));
+        const formattedLogs: AudioLog[] = data.map(formatIncomingLog);
 
         setLogs(prev => {
           // Filter out expired temp logs
           const validTempLogs = prev.filter(log => !isExpiredTempLog(log.id));
-          const merged = [...formattedLogs, ...validTempLogs];
-
+          
+          // Merge and deduplicate by ID (in case real-time beat us to it)
+          const existingIds = new Set(formattedLogs.map(l => l.id));
+          const filteredTemp = validTempLogs.filter(l => !existingIds.has(l.id));
+          
+          const merged = [...formattedLogs, ...filteredTemp];
           setSystem(s => ({ ...s, isConnected: true }));
-          return merged;
+          return merged.slice(0, MAX_LOGS_DISPLAY);
         });
       }
     } catch (err) {
@@ -247,6 +256,44 @@ const AudioLogger: React.FC = () => {
       }
     }
   }, []);
+
+  // ========== REAL-TIME SUBSCRIPTION ==========
+  // Fixed: Subscription now re-initializes when the connection is established
+  useEffect(() => {
+    const supabase = getSupabaseClient();
+    if (!supabase || !system.isConnected) return;
+
+    console.log("Initializing real-time subscription...");
+    const channel = supabase
+      .channel('audio_logs_realtime_v2')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'audio_logs' },
+        (payload) => {
+          if (isMountedRef.current) {
+            const newLog = formatIncomingLog(payload.new);
+            setLastInsertedId(newLog.id);
+            setLogs(prev => {
+              // Remove temporary logs when the real one arrives, and deduplicate
+              const filtered = prev.filter(log => !log.id.startsWith('temp-') && log.id !== newLog.id);
+              return [newLog, ...filtered].slice(0, MAX_LOGS_DISPLAY);
+            });
+            setSystem(s => ({ ...s, serverLog: 'New intelligence record received.' }));
+            // Clear highlight after 3 seconds
+            setTimeout(() => setLastInsertedId(null), 3000);
+          }
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          setSystem(s => ({ ...s, serverLog: 'Real-time infrastructure active.' }));
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [system.isConnected]); // Re-subscribe when connection status changes
 
   // ========== RECORDING LOGIC ==========
   const handleSplit = useCallback(() => {
@@ -319,13 +366,13 @@ const AudioLogger: React.FC = () => {
 
       setSystem(prev => ({ ...prev, serverLog: 'Upload Success! AI is analyzing...' }));
 
-      // Schedule polling attempts
+      // Schedule polling attempts as fallback to Real-time
       POLLING_SCHEDULE.forEach((delay, index) => {
         const timer = window.setTimeout(() => {
           if (isMountedRef.current) {
             fetchLogs();
             if (index === POLLING_SCHEDULE.length - 1) {
-              setSystem(s => ({ ...s, serverLog: 'Recording processed' }));
+              setSystem(s => ({ ...s, serverLog: 'Infrastructure sync check.' }));
             }
           }
         }, delay);
@@ -485,21 +532,24 @@ const AudioLogger: React.FC = () => {
 
   // ========== RENDER ==========
   return (
-    // Responsive grid: Stacked on mobile/tablet (h-auto), Side-by-side on large screens (fixed height)
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-auto lg:h-[calc(100vh-12rem)]">
       {/* Left Column: List & Controls */}
-      {/* Fixed height on mobile (500px) to allow internal scrolling, auto/flex height on desktop */}
       <div className="lg:col-span-2 flex flex-col gap-4 h-[600px] lg:h-auto">
         {/* Control Panel */}
         <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 space-y-4 shadow-sm shrink-0">
-          {/* Status Bar - Simplified */}
+          {/* Status Bar */}
           <div className="flex justify-between items-center text-xs text-slate-400">
             <div className="flex items-center gap-3">
-              {/* Only show DB Offline badge when there's an error or not connected */}
               {!system.isConnected && (
                 <span className="flex items-center gap-1.5 px-2 py-1 rounded bg-red-500/10 text-red-400">
                   <WifiOff size={12} />
                   DB Offline
+                </span>
+              )}
+              {system.isConnected && (
+                <span className="flex items-center gap-1.5 px-2 py-1 rounded bg-green-500/10 text-green-400">
+                  <Database size={12} />
+                  Real-time Active
                 </span>
               )}
             </div>
@@ -512,7 +562,7 @@ const AudioLogger: React.FC = () => {
             </button>
           </div>
 
-          {/* Server Log Terminal - Conditional Display */}
+          {/* Server Log Terminal */}
           {shouldShowTerminal && (
             <div className="bg-slate-950 border border-slate-800 p-2.5 rounded-lg font-mono text-[11px] text-green-400 flex gap-3 items-center overflow-hidden animate-fade-in">
               <Terminal size={12} className="shrink-0 text-slate-500" />
@@ -618,7 +668,7 @@ const AudioLogger: React.FC = () => {
                   selectedLog?.id === log.id
                     ? 'bg-blue-500/10 border-blue-500/50 shadow-lg shadow-blue-900/10'
                     : 'bg-slate-800 border-slate-700 hover:border-slate-600'
-                }`}
+                } ${lastInsertedId === log.id ? 'ring-2 ring-blue-500 animate-pulse' : ''}`}
               >
                 <div className="flex justify-between items-start mb-2">
                   <div>
@@ -658,11 +708,11 @@ const AudioLogger: React.FC = () => {
               </div>
             ))
           ) : (
-            <div className="h-full flex flex-col items-center justify-center text-slate-500 gap-3 opacity-60">
+            <div className="h-full flex flex-col items-center justify-center text-slate-500 gap-3 opacity-60 py-20">
               <Database size={40} className="stroke-1" />
               <p className="text-sm">No audio logs found.</p>
               {system.isConnected && (
-                <p className="text-[10px] text-yellow-500">Check RLS Permissions if you expect data.</p>
+                <p className="text-[10px] text-blue-400 font-bold animate-pulse">Intelligent infrastructure listening for new data...</p>
               )}
             </div>
           )}
@@ -670,7 +720,6 @@ const AudioLogger: React.FC = () => {
       </div>
 
       {/* Right Column: Assistant & Details */}
-      {/* Fixed height on mobile (500px), auto/flex on desktop */}
       <div className="bg-slate-800 rounded-xl border border-slate-700 flex flex-col overflow-hidden shadow-xl h-[500px] lg:h-auto">
         {selectedLog ? (
           <div className="flex-1 p-6 overflow-y-auto">
