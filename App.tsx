@@ -1,61 +1,43 @@
 
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Southport AI - Eric Wilson</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-      body {
-        font-family: 'Inter', sans-serif;
-        background-color: #0f172a; /* Slate 900 */
-        color: #f8fafc; /* Slate 50 */
-        margin: 0;
-        min-height: 100vh;
-      }
-      /* Custom scrollbar for webkit */
-      ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
-      }
-      ::-webkit-scrollbar-track {
-        background: #1e293b; 
-      }
-      ::-webkit-scrollbar-thumb {
-        background: #475569; 
-        border-radius: 4px;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: #64748b; 
-      }
-      @keyframes fade-in {
-        from { opacity: 0; transform: translateY(10px); }
-        to { opacity: 1; transform: translateY(0); }
-      }
-      .animate-fade-in {
-        animation: fade-in 0.6s ease-out forwards;
-      }
-    </style>
-  <script type="importmap">
-{
-  "imports": {
-    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0",
-    "react": "https://aistudiocdn.com/react@^19.2.1",
-    "react/": "https://aistudiocdn.com/react@^19.2.1/",
-    "react-dom": "https://aistudiocdn.com/react-dom@^19.2.1",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.31.0",
-    "@supabase/supabase-js": "https://aistudiocdn.com/@supabase/supabase-js@^2.86.0",
-    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
-    "vite": "https://esm.sh/vite@^7.3.0"
-  }
-}
-</script>
-</head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/index.tsx"></script>
-  </body>
-</html>
+import React, { useState } from 'react';
+import Layout from './components/Layout';
+import Dashboard from './components/Dashboard';
+import EmailSummaries from './components/EmailSummaries';
+import AudioLogger from './components/AudioLogger';
+import SocialPoster from './components/SocialPoster';
+import ReviewBooster from './components/ReviewBooster';
+import Settings from './components/Settings';
+import { ViewState } from './types';
+
+const App: React.FC = () => {
+  const [currentView, setCurrentView] = useState<ViewState>(ViewState.DASHBOARD);
+
+  const renderView = () => {
+    switch (currentView) {
+      case ViewState.DASHBOARD:
+        return <Dashboard onNavigate={setCurrentView} />;
+      case ViewState.EMAILS:
+        return <EmailSummaries />;
+      case ViewState.AUDIO_LOGS:
+        return <AudioLogger />;
+      case ViewState.SOCIAL_MEDIA:
+        return <SocialPoster />;
+      case ViewState.REVIEWS:
+        return <ReviewBooster />;
+      case ViewState.SETTINGS:
+        return <Settings />;
+      default:
+        return <Dashboard onNavigate={setCurrentView} />;
+    }
+  };
+
+  return (
+    <Layout currentView={currentView} onNavigate={setCurrentView}>
+      <div className="animate-fade-in">
+        {renderView()}
+      </div>
+    </Layout>
+  );
+};
+
+export default App;
