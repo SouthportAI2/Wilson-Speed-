@@ -101,7 +101,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
   ];
 
   return (
-    <div className="space-y-16 py-8">
+    <div className="space-y-16 py-8 animate-fade-in">
       <header className="max-w-4xl space-y-6">
         <h1 className="text-6xl lg:text-8xl font-[900] text-white tracking-tighter leading-[0.9] mb-4">
           Welcome to <br />
@@ -133,7 +133,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
             <div className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
             <h4 className="text-xl font-bold text-white uppercase tracking-wider">Infrastructure Readiness</h4>
           </div>
-          <p className="text-slate-400 text-lg">All processing nodes are synchronized with the Gemini global mesh. Real-time updates are streaming through the data layer.</p>
+          <p className="text-slate-400 text-lg">All processing nodes are synchronized with the Gemini global mesh.</p>
         </div>
         <div className="flex gap-6 shrink-0 w-full md:w-auto">
           <div className="flex-1 md:w-40 text-center px-8 py-6 bg-slate-950/50 rounded-2xl border border-slate-800 shadow-inner">
@@ -141,8 +141,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
             <div className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mt-1">Uptime</div>
           </div>
           <div className="flex-1 md:w-40 text-center px-8 py-6 bg-slate-950/50 rounded-2xl border border-slate-800 shadow-inner">
-            <div className="text-3xl font-black text-white">12.4k</div>
-            <div className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mt-1">Ops/mo</div>
+            <div className="text-3xl font-black text-white">Active</div>
+            <div className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mt-1">Status</div>
           </div>
         </div>
       </footer>
