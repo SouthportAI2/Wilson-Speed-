@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Mail, Mic, Share2, Star, LucideIcon, ArrowRight, Zap, Shield, Activity } from 'lucide-react';
 import { ViewState } from '../types.ts';
@@ -17,7 +16,7 @@ const DashboardCard: React.FC<DashboardCardProps> = ({ title, description, icon:
   return (
     <button 
       onClick={onClick}
-      className={`group relative flex flex-col items-start text-left bg-slate-900/60 backdrop-blur-xl rounded-[2.5rem] p-8 border border-slate-800/50 shadow-2xl hover:border-blue-500/50 transition-all duration-500 hover:-translate-y-2 overflow-hidden w-full h-full ring-1 ring-white/5 animate-fade-in`}
+      className={`group relative flex flex-col items-start text-left bg-slate-900/40 backdrop-blur-xl rounded-[2.5rem] p-8 border border-slate-800/50 shadow-2xl hover:border-blue-500/50 transition-all duration-700 hover:-translate-y-2 overflow-hidden w-full h-full ring-1 ring-white/5 animate-fade-in`}
       style={{ animationDelay: `${index * 100}ms` }}
     >
       <div className={`absolute -top-12 -right-12 w-64 h-64 bg-gradient-to-br ${glow} opacity-0 group-hover:opacity-20 blur-[80px] transition-opacity duration-700 rounded-full`} />
@@ -26,7 +25,7 @@ const DashboardCard: React.FC<DashboardCardProps> = ({ title, description, icon:
         <div className={`p-4 rounded-2xl bg-slate-950 border border-slate-800 shadow-inner group-hover:scale-110 group-hover:rotate-3 transition-all duration-500 ${color}`}>
           <Icon size={32} />
         </div>
-        <div className="text-[10px] font-mono text-slate-600 group-hover:text-blue-500/50 transition-colors">
+        <div className="text-[10px] font-mono text-slate-600 group-hover:text-blue-500/50 transition-colors uppercase tracking-widest">
           NODE_{index + 1} // ACTIVE
         </div>
       </div>
@@ -36,8 +35,8 @@ const DashboardCard: React.FC<DashboardCardProps> = ({ title, description, icon:
       </h3>
 
       <ul className="space-y-3 mb-8 flex-1">
-        {description.map((item, index) => (
-          <li key={index} className="flex items-start text-sm text-slate-400 font-medium leading-relaxed">
+        {description.map((item, i) => (
+          <li key={i} className="flex items-start text-sm text-slate-400 font-medium leading-relaxed">
             <span className="mr-3 mt-2 w-1 h-1 rounded-full flex-shrink-0 bg-blue-500/50 group-hover:bg-blue-400 transition-colors duration-500" />
             <span>{item}</span>
           </li>
@@ -47,7 +46,7 @@ const DashboardCard: React.FC<DashboardCardProps> = ({ title, description, icon:
       <div className="mt-auto w-full pt-6 border-t border-slate-800 flex justify-between items-center text-[10px] font-black uppercase tracking-[0.25em] text-slate-500 group-hover:text-blue-400 transition-all duration-300">
         <span className="flex items-center gap-2">
           <Zap size={10} className="animate-pulse" />
-          Initialize Interface
+          Initialize Node
         </span>
         <ArrowRight size={16} className="group-hover:translate-x-2 transition-transform duration-300" />
       </div>
@@ -68,9 +67,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
       color: 'text-blue-400',
       glow: 'from-blue-600 to-cyan-400',
       description: [
-        'Real-time synchronization with primary inbox',
-        'AI classification for urgent requests',
-        'Automated drafting and summarization'
+        'Real-time automated inbox monitoring',
+        'AI triage for mission-critical requests',
+        'Smart drafting and semantic summaries'
       ]
     },
     {
@@ -80,9 +79,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
       color: 'text-purple-400',
       glow: 'from-purple-600 to-pink-400',
       description: [
-        'Voice transcript infrastructure logging',
-        'Secure shop floor voice-to-text',
-        'Direct data mapping and archival'
+        'Multi-track voice log infrastructure',
+        'High-fidelity transcript processing',
+        'Secure asset data mapping'
       ]
     },
     {
@@ -92,9 +91,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
       color: 'text-orange-400',
       glow: 'from-orange-600 to-yellow-400',
       description: [
-        'Multi-node content distribution',
-        'Gemini-driven engagement copy',
-        'Performance tracking and analytics'
+        'Automated content distribution network',
+        'Generative copy engagement logic',
+        'Real-time performance metrics'
       ]
     },
     {
@@ -104,8 +103,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
       color: 'text-emerald-400',
       glow: 'from-emerald-600 to-teal-400',
       description: [
-        'Personalized review request logic',
-        'Direct Google Business integration',
+        'Dynamic client feedback collection',
+        'Direct business portal integration',
         'Automated sentiment reporting'
       ]
     }
@@ -124,7 +123,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
           </span>
         </h1>
         <p className="text-slate-500 text-lg md:text-xl font-medium max-w-2xl mx-auto leading-relaxed animate-fade-in" style={{ animationDelay: '100ms' }}>
-          Your centralized command core for high-speed automated business intelligence and secure infrastructure management.
+          Your centralized command core for high-speed automated business intelligence and distributed infrastructure management.
         </p>
       </header>
 
@@ -149,7 +148,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
             <Activity size={18} className="text-emerald-500 animate-pulse" />
             <h4 className="text-sm font-black text-white uppercase tracking-[0.2em]">Neural Mesh Connectivity</h4>
           </div>
-          <p className="text-slate-500 text-sm font-medium leading-relaxed">All local processing nodes are currently synced with the Gemini 3.0 global infrastructure. Ready for task execution.</p>
+          <p className="text-slate-500 text-sm font-medium leading-relaxed">All active nodes are currently synchronized with the Gemini 3 Core. Encryption active and verified.</p>
         </div>
         <div className="flex gap-6 shrink-0 w-full md:w-auto">
           <div className="flex-1 md:w-36 text-center p-5 bg-slate-950/60 rounded-2xl border border-slate-800 ring-1 ring-white/5 shadow-inner">
