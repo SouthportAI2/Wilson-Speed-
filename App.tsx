@@ -1,13 +1,12 @@
-
 import React, { useState } from 'react';
-import Layout from './components/Layout';
-import Dashboard from './components/Dashboard';
-import EmailSummaries from './components/EmailSummaries';
-import AudioLogger from './components/AudioLogger';
-import SocialPoster from './components/SocialPoster';
-import ReviewBooster from './components/ReviewBooster';
-import Settings from './components/Settings';
-import { ViewState } from './types';
+import Layout from './components/Layout.tsx';
+import Dashboard from './components/Dashboard.tsx';
+import EmailSummaries from './components/EmailSummaries.tsx';
+import AudioLogger from './components/AudioLogger.tsx';
+import SocialPoster from './components/SocialPoster.tsx';
+import ReviewBooster from './components/ReviewBooster.tsx';
+import Settings from './components/Settings.tsx';
+import { ViewState } from './types.ts';
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<ViewState>(ViewState.DASHBOARD);
