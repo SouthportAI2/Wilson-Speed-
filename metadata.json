@@ -1,6 +1,7 @@
+
 {
-  "name": "Southport AI - Eric Wilson",
-  "description": "Personal AI infrastructure dashboard for Eric Wilson, featuring email summarization, audio logging, social media automation, and review management.",
+  "name": "Eric Wilson - AI Infrastructure",
+  "description": "Personal AI command core for Eric Wilson, featuring automated email intake, audio logging infrastructure, and social engagement nodes.",
   "requestFramePermissions": [
     "microphone"
   ]
