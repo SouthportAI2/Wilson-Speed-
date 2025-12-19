@@ -1,28 +1,18 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
-import { EmailSummary } from "../types";
+import { EmailSummary } from "../types.ts";
 
-/**
- * The API key is sourced from process.env.API_KEY as per the system instructions.
- * If Vite is used, this is typically injected via the define config.
- */
 const getAI = () => {
-  // Use a fallback to check if the key is effectively provided before instantiating.
-  // This prevents the SDK from throwing a top-level Error that crashes the React mount.
   const apiKey = process.env.API_KEY;
-  
   if (!apiKey || apiKey === '') {
-    console.error("Gemini API Key is missing. Please ensure process.env.API_KEY is configured.");
+    console.error("Gemini API Key is missing.");
     return null;
   }
-  
   return new GoogleGenAI({ apiKey });
 };
 
 export const generateEmailSummaries = async (): Promise<EmailSummary[]> => {
   const ai = getAI();
   if (!ai) return [];
-  
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
@@ -48,58 +38,52 @@ export const generateEmailSummaries = async (): Promise<EmailSummary[]> => {
     });
     return JSON.parse(response.text || '[]');
   } catch (error) {
-    console.error("Gemini Error in generateEmailSummaries:", error);
+    console.error("Gemini Error:", error);
     return [];
   }
 };
 
 export const askAssistant = async (query: string, context: string): Promise<string> => {
   const ai = getAI();
-  if (!ai) return "AI Configuration Error: Missing API Key.";
-  
+  if (!ai) return "AI Configuration Error.";
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: `Context from logs: ${context}\n\nUser Question: ${query}`,
       config: {
-        systemInstruction: "You are Eric Wilson's AI assistant. Answer questions based on the provided shop audio logs."
+        systemInstruction: "You are Eric Wilson's AI assistant."
       }
     });
-    return response.text || "I'm sorry, I couldn't process that request.";
+    return response.text || "No response.";
   } catch (error) {
-    console.error("Gemini Error in askAssistant:", error);
-    return "Error connecting to AI core.";
+    return "Error connecting to AI.";
   }
 };
 
 export const generateSocialPost = async (topic: string): Promise<string> => {
   const ai = getAI();
-  if (!ai) return "AI Configuration Error: Missing API Key.";
-  
+  if (!ai) return "AI Key Missing.";
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: `Create a professional social media post for an auto shop about: ${topic}. Include hashtags and a call to action.`,
+      contents: `Create a professional social media post for an auto shop about: ${topic}.`,
     });
     return response.text || "";
   } catch (error) {
-    console.error("Gemini Error in generateSocialPost:", error);
     return "Generation failed.";
   }
 };
 
 export const generateReviewEmail = async (clientEmail: string): Promise<string> => {
   const ai = getAI();
-  if (!ai) return "AI Configuration Error: Missing API Key.";
-  
+  if (!ai) return "AI Key Missing.";
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: `Write a short, friendly, high-conversion email asking for a Google Review. Client: ${clientEmail}`,
+      contents: `Write a short friendly email asking for a Google Review. Client: ${clientEmail}`,
     });
     return response.text || "";
   } catch (error) {
-    console.error("Gemini Error in generateReviewEmail:", error);
     return "Drafting failed.";
   }
 };
