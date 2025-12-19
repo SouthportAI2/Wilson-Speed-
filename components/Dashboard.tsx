@@ -1,6 +1,6 @@
 import React from 'react';
 import { Mail, Mic, Share2, Star, Shield, Zap, ArrowRight, Activity } from 'lucide-react';
-import { ViewState } from '../types.ts';
+import { ViewState } from '../types';
 
 interface BoxProps {
   title: string;
