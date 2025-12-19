@@ -133,7 +133,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
             <div className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
             <h4 className="text-xl font-bold text-white uppercase tracking-wider">Infrastructure Readiness</h4>
           </div>
-          <p className="text-slate-400 text-lg">All processing nodes are synchronized with the Gemini global mesh.</p>
+          <p className="text-slate-400 text-lg font-medium">All processing nodes are synchronized with the Gemini global mesh.</p>
         </div>
         <div className="flex gap-6 shrink-0 w-full md:w-auto">
           <div className="flex-1 md:w-40 text-center px-8 py-6 bg-slate-950/50 rounded-2xl border border-slate-800 shadow-inner">
