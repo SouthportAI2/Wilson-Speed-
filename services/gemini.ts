@@ -1,24 +1,19 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { EmailSummary } from "../types.ts";
 
+/**
+ * Creates a new instance of the GoogleGenAI client using the environment's API key.
+ * This ensures the client is always initialized with current credentials.
+ */
 const getAI = () => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey || apiKey.trim() === '') {
-    console.warn("Gemini API Key is missing or empty. AI features will be disabled.");
-    return null;
-  }
-  try {
-    return new GoogleGenAI({ apiKey });
-  } catch (err) {
-    console.error("Failed to initialize Gemini AI:", err);
-    return null;
-  }
+  return new GoogleGenAI({ apiKey: process.env.API_KEY });
 };
 
+/**
+ * Generates structured summaries of emails using Gemini 3 Flash.
+ */
 export const generateEmailSummaries = async (): Promise<EmailSummary[]> => {
   const ai = getAI();
-  if (!ai) return [];
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
@@ -42,54 +37,66 @@ export const generateEmailSummaries = async (): Promise<EmailSummary[]> => {
         }
       }
     });
-    return JSON.parse(response.text || '[]');
+    
+    const text = response.text;
+    if (!text) return [];
+    return JSON.parse(text);
   } catch (error) {
-    console.error("Gemini Error:", error);
+    console.error("Infrastructure AI Node Error [Email]:", error);
     return [];
   }
 };
 
+/**
+ * Answers questions based on provided logs using Gemini 3 Pro for higher reasoning.
+ */
 export const askAssistant = async (query: string, context: string): Promise<string> => {
   const ai = getAI();
-  if (!ai) return "AI currently offline. Please check configuration.";
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: `Context from infrastructure logs: ${context}\n\nUser Question: ${query}`,
+      model: "gemini-3-pro-preview",
+      contents: `Context from infrastructure logs:\n${context}\n\nUser Question: ${query}`,
       config: {
-        systemInstruction: "You are Eric Wilson's personal AI infrastructure assistant. Your tone is technical, efficient, and precise."
+        systemInstruction: "You are Eric Wilson's personal AI infrastructure assistant. Your tone is technical, efficient, and precise. Provide actionable insights from the logs."
       }
     });
     return response.text || "No response received from core.";
   } catch (error) {
+    console.error("Infrastructure AI Node Error [Assistant]:", error);
     return "Error connecting to AI infrastructure node.";
   }
 };
 
+/**
+ * Generates social media copy using Gemini 3 Flash.
+ */
 export const generateSocialPost = async (topic: string): Promise<string> => {
   const ai = getAI();
-  if (!ai) return "AI distribution node unavailable.";
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: `Create a professional social media post for Eric Wilson's auto shop infrastructure regarding: ${topic}. Include hashtags and a strong call to action.`,
+      contents: `Create a professional social media post for Eric Wilson's business regarding: ${topic}. Include relevant emojis, hashtags, and a strong call to action for high engagement.`,
     });
     return response.text || "";
   } catch (error) {
+    console.error("Infrastructure AI Node Error [Social]:", error);
     return "Social generation cycle failed.";
   }
 };
 
+/**
+ * Drafts a personalized review request email.
+ */
 export const generateReviewEmail = async (clientEmail: string): Promise<string> => {
   const ai = getAI();
-  if (!ai) return "AI request node unavailable.";
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: `Draft a high-conversion, friendly email requesting a Google Review for Eric Wilson's business. Client: ${clientEmail}`,
+      contents: `Draft a high-conversion, professional yet friendly email requesting a Google Review for Eric Wilson's business. Target recipient: ${clientEmail}. Keep it concise and emphasize how much their feedback matters.`,
     });
     return response.text || "";
   } catch (error) {
-    return "Drafting cycle failed.";
+    console.error("Infrastructure AI Node Error [Reviews]:", error);
+    return "Review drafting cycle failed.";
   }
 };
