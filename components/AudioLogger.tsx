@@ -1,9 +1,8 @@
-
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Mic, Search, Play, Square, UploadCloud, RefreshCw, Clock, FileText, Bot, Cpu, WifiOff, AlertTriangle, Database, Terminal, VolumeX } from 'lucide-react';
-import { askAssistant } from '../services/gemini';
-import { getSupabaseClient } from '../services/supabaseClient';
-import { AudioLog } from '../types';
+import { askAssistant } from '../services/gemini.ts';
+import { getSupabaseClient } from '../services/supabaseClient.ts';
+import { AudioLog } from '../types.ts';
 
 // ============================================================================
 // CONSTANTS & CONFIG
@@ -162,7 +161,6 @@ const AudioLogger: React.FC = () => {
   });
 
   const [system, setSystem] = useState<SystemState>({
-    // Fixed: Removed invalid type keywords in object literal
     isProcessing: false,
     isConnected: false,
     dbError: null,
@@ -172,7 +170,7 @@ const AudioLogger: React.FC = () => {
   const [assistant, setAssistant] = useState<AssistantState>({
     query: '',
     response: '',
-    isThinking: false,
+    isThinking: boolean;
   });
 
   // ========== REFS ==========
@@ -258,7 +256,6 @@ const AudioLogger: React.FC = () => {
   }, []);
 
   // ========== REAL-TIME SUBSCRIPTION ==========
-  // Fixed: Subscription now re-initializes when the connection is established
   useEffect(() => {
     const supabase = getSupabaseClient();
     if (!supabase || !system.isConnected) return;
