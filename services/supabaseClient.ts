@@ -6,14 +6,20 @@ export const getSupabaseClient = () => {
   const storedConfig = localStorage.getItem('southport_config');
   const config = storedConfig ? JSON.parse(storedConfig) : {};
   
-  // 2. Try Environment Variables (Vercel/Vite standard)
-  const supabaseUrl = config.supabaseUrl || (import.meta as any).env.VITE_SUPABASE_URL;
-  const supabaseKey = config.supabaseKey || (import.meta as any).env.VITE_SUPABASE_ANON_KEY;
+  // 2. Safely check for credentials
+  // We avoid import.meta.env as it crashes in non-bundled browser environments
+  const supabaseUrl = config.supabaseUrl;
+  const supabaseKey = config.supabaseKey;
 
   if (!supabaseUrl || !supabaseKey) {
-    console.warn("Supabase credentials not found in settings or environment variables");
+    // Silent fail to allow mock state or prompt user in settings
     return null;
   }
 
-  return createClient(supabaseUrl, supabaseKey);
+  try {
+    return createClient(supabaseUrl, supabaseKey);
+  } catch (e) {
+    console.error("Supabase Initialization Error:", e);
+    return null;
+  }
 };
