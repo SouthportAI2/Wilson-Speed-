@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Mic, Search, Play, Square, UploadCloud, RefreshCw, Clock, FileText, Bot, Cpu, WifiOff, AlertTriangle, Database, Terminal, VolumeX } from 'lucide-react';
 import { askAssistant } from '../services/gemini.ts';
@@ -167,10 +168,11 @@ const AudioLogger: React.FC = () => {
     serverLog: '',
   });
 
+  // Fixed: Initialization of isThinking was using 'boolean' as a value instead of 'false' and had a syntax error.
   const [assistant, setAssistant] = useState<AssistantState>({
     query: '',
     response: '',
-    isThinking: boolean;
+    isThinking: false,
   });
 
   // ========== REFS ==========
