@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Mail, RefreshCw, AlertCircle, Package, UserCheck, Clock } from 'lucide-react';
-import { generateEmailSummaries } from '../services/gemini';
-import { EmailSummary } from '../types';
+import { generateEmailSummaries } from '../services/gemini.ts';
+import { EmailSummary } from '../types.ts';
 
 const EmailSummaries: React.FC = () => {
   const [emails, setEmails] = useState<EmailSummary[]>([]);
@@ -17,7 +17,6 @@ const EmailSummaries: React.FC = () => {
   };
 
   useEffect(() => {
-    // Initial fetch simulation
     fetchEmails();
   }, []);
 
