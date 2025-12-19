@@ -1,103 +1,60 @@
-import React from 'react';
-import { Mail, Mic, Share2, Star } from 'lucide-react';
-import DashboardCard from './DashboardCard';
-import { ViewState } from '../types';
-
-interface DashboardProps {
-  onNavigate: (view: ViewState) => void;
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Southport AI - Eric Wilson</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+      body {
+        font-family: 'Inter', sans-serif;
+        background-color: #020617; /* Very Dark Slate/Blue */
+        color: #f8fafc;
+        margin: 0;
+        min-height: 100vh;
+        overflow-x: hidden;
+      }
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #0f172a; 
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #334155; 
+        border-radius: 10px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #475569; 
+      }
+      @keyframes fade-in {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .animate-fade-in {
+        animation: fade-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      }
+    </style>
+    <script type="importmap">
+{
+  "imports": {
+    "lucide-react": "https://esm.sh/lucide-react@0.454.0",
+    "react": "https://esm.sh/react@18.2.0",
+    "react-dom": "https://esm.sh/react-dom@18.2.0",
+    "@google/genai": "https://esm.sh/@google/genai@0.2.1",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2.39.7",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "vite": "https://esm.sh/vite@^7.3.0",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2"
+  }
 }
-
-const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
-  const cards = [
-    {
-      id: ViewState.EMAILS,
-      title: 'Email Intake',
-      icon: Mail,
-      color: 'from-blue-600 to-cyan-500',
-      description: [
-        'Real-time Yahoo email sync',
-        'AI-powered urgency classification',
-        'Customer request summarization'
-      ]
-    },
-    {
-      id: ViewState.AUDIO_LOGS,
-      title: 'Audio Logger',
-      icon: Mic,
-      color: 'from-purple-600 to-pink-500',
-      description: [
-        'Voice transcript recording',
-        'Continuous shop floor monitoring',
-        'Automated vehicle data extraction'
-      ]
-    },
-    {
-      id: ViewState.SOCIAL_MEDIA,
-      title: 'Social Poster',
-      icon: Share2,
-      color: 'from-orange-600 to-yellow-500',
-      description: [
-        'Automated Facebook/Instagram content',
-        'Gemini-assisted copywriting',
-        'Engagement performance tracking'
-      ]
-    },
-    {
-      id: ViewState.REVIEWS,
-      title: 'Review Booster',
-      icon: Star,
-      color: 'from-emerald-600 to-teal-500',
-      description: [
-        'Personalized review request generation',
-        'Direct Google Business integration',
-        'Rating acceleration dashboard'
-      ]
-    }
-  ];
-
-  return (
-    <div className="space-y-12">
-      <header className="max-w-4xl">
-        <h1 className="text-5xl lg:text-7xl font-black text-white tracking-tighter leading-none mb-4">
-          Welcome to <span className="text-blue-500">Eric Wilsons</span> <br />
-          Person AI infrastructure.
-        </h1>
-        <p className="text-slate-400 text-xl font-medium max-w-2xl">
-          Centralized command core for automated intelligence, secure communications, and business growth engines.
-        </p>
-      </header>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        {cards.map((card) => (
-          <DashboardCard
-            key={card.id}
-            title={card.title}
-            description={card.description}
-            icon={card.icon}
-            color={card.color}
-            onClick={() => onNavigate(card.id)}
-          />
-        ))}
-      </div>
-
-      <div className="bg-slate-900/50 border border-slate-800 rounded-[2rem] p-8 flex flex-col md:flex-row items-center gap-8 shadow-2xl">
-        <div className="flex-1">
-          <h4 className="text-xl font-bold text-white mb-2">Infrastructure Readiness</h4>
-          <p className="text-slate-400 text-sm">All processing nodes are synchronized with the Gemini global mesh. Real-time updates are streaming through the data layer.</p>
-        </div>
-        <div className="flex gap-4">
-          <div className="text-center px-6 py-4 bg-slate-800 rounded-2xl border border-slate-700">
-            <div className="text-2xl font-black text-white">99.9%</div>
-            <div className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Uptime</div>
-          </div>
-          <div className="text-center px-6 py-4 bg-slate-800 rounded-2xl border border-slate-700">
-            <div className="text-2xl font-black text-white">12.4k</div>
-            <div className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Ops/mo</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-export default Dashboard;
+</script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./index.tsx"></script>
+  </body>
+</html>
