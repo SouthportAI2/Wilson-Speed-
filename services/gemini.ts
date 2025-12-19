@@ -1,21 +1,22 @@
-import { GoogleGenAI, Type } from "@google/genai";
-import { EmailSummary } from "../types.ts";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import type { EmailSummary } from "../types";
 
 /**
- * Safely initializes the Google GenAI SDK.
+ * Safely initializes the Gemini AI client for browser environment.
  */
 const getAI = () => {
-  const apiKey = (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : '';
-  
-  if (!apiKey || apiKey.length < 10) {
-    console.warn("Gemini API Key is missing or invalid. Please check your environment settings.");
-    return null;
-  }
-  
   try {
-    return new GoogleGenAI({ apiKey });
-  } catch (e) {
-    console.error("Failed to initialize GoogleGenAI:", e);
+    // Use Vite's import.meta.env for browser environment
+    const key = import.meta.env.VITE_GEMINI_API_KEY;
+    
+    if (!key || key.trim() === '') {
+      console.warn("Gemini API Key is not defined in environment.");
+      return null;
+    }
+    
+    return new GoogleGenerativeAI(key);
+  } catch (error) {
+    console.error("Critical error initializing Gemini:", error);
     return null;
   }
 };
@@ -23,78 +24,72 @@ const getAI = () => {
 export const generateEmailSummaries = async (): Promise<EmailSummary[]> => {
   const ai = getAI();
   if (!ai) return [];
+  
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: "Analyze recent business emails and provide 3 realistic mock summaries for an auto shop infrastructure dashboard. Return JSON.",
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              id: { type: Type.STRING },
-              sender: { type: Type.STRING },
-              subject: { type: Type.STRING },
-              summary: { type: Type.STRING },
-              category: { type: Type.STRING, enum: ['URGENT', 'CUSTOMER', 'PARTS', 'ADMIN'] },
-              timestamp: { type: Type.STRING }
-            },
-            required: ['id', 'sender', 'subject', 'summary', 'category', 'timestamp']
-          }
-        }
-      }
-    });
-    return JSON.parse(response.text || '[]');
+    const model = ai.getGenerativeModel({ model: "gemini-pro" });
+    const prompt = "Analyze recent business emails and provide 3 realistic mock summaries for an auto shop dashboard. Return as JSON array with id, sender, subject, summary, category (URGENT/CUSTOMER/PARTS/ADMIN), and timestamp fields.";
+    
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
+    
+    return text ? JSON.parse(text) : [];
   } catch (error) {
-    console.error("Gemini Email Error:", error);
+    console.error("Error generating email summaries:", error);
     return [];
   }
 };
 
 export const askAssistant = async (query: string, context: string): Promise<string> => {
   const ai = getAI();
-  if (!ai) return "Infrastructure node offline (Missing API Key).";
+  if (!ai) return "AI assistant unavailable. Check API credentials.";
+  
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-pro-preview",
-      contents: `Context:\n${context}\n\nQuestion: ${query}`,
-      config: {
-        systemInstruction: "You are Eric Wilson's personal AI infrastructure assistant. Provide technical, precise insights."
-      }
-    });
-    return response.text || "No response received.";
+    const model = ai.getGenerativeModel({ model: "gemini-pro" });
+    const prompt = `Context from logs:\n${context}\n\nUser Question: ${query}\n\nProvide a technical, precise, and actionable response.`;
+    
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    
+    return response.text() || "Query returned no data.";
   } catch (error) {
-    console.error("Gemini Assistant Error:", error);
-    return "Error communicating with AI core.";
+    console.error("Error with AI assistant:", error);
+    return "Connection error to AI.";
   }
 };
 
 export const generateSocialPost = async (topic: string): Promise<string> => {
   const ai = getAI();
-  if (!ai) return "AI Core Offline.";
+  if (!ai) return "Social post generator offline.";
+  
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: `Create a professional social post for Eric Wilson regarding: ${topic}.`,
-    });
-    return response.text || "";
+    const model = ai.getGenerativeModel({ model: "gemini-pro" });
+    const prompt = `Draft a professional social media post about: ${topic}. Include relevant emojis and hashtags.`;
+    
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    
+    return response.text() || "Failed to generate post.";
   } catch (error) {
-    return "Error generating post.";
+    console.error("Error generating social post:", error);
+    return "Generation failed.";
   }
 };
 
 export const generateReviewEmail = async (clientEmail: string): Promise<string> => {
   const ai = getAI();
-  if (!ai) return "AI Core Offline.";
+  if (!ai) return "Review email generator offline.";
+  
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: `Draft a friendly review request email for: ${clientEmail}.`,
-    });
-    return response.text || "";
+    const model = ai.getGenerativeModel({ model: "gemini-pro" });
+    const prompt = `Draft a friendly, professional review request email for: ${clientEmail}. Keep it brief.`;
+    
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    
+    return response.text() || "Failed to generate email.";
   } catch (error) {
-    return "Error drafting email.";
+    console.error("Error generating review email:", error);
+    return "Drafting failed.";
   }
 };
