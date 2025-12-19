@@ -9,7 +9,7 @@ import {
   Shield,
   Activity
 } from 'lucide-react';
-import { ViewState } from '../types.ts';
+import { ViewState } from '../types';
 
 interface LayoutProps {
   children: React.ReactNode;
