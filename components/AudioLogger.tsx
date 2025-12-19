@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Mic, Search, Play, Square, UploadCloud, RefreshCw, Clock, FileText, Bot, Cpu, WifiOff, AlertTriangle, Database, Terminal, VolumeX } from 'lucide-react';
-import { askAssistant } from '../services/gemini.ts';
-import { getSupabaseClient } from '../services/supabaseClient.ts';
-import { AudioLog } from '../types.ts';
+import { askAssistant } from '../services/gemini';
+import { getSupabaseClient } from '../services/supabaseClient';
+import { AudioLog } from '../types';
 
 const MAX_LOGS_DISPLAY = 50;
 
