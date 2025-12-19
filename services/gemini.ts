@@ -1,89 +1,59 @@
-import { GoogleGenAI, Type } from "@google/genai";
-import { EmailSummary } from "../types.ts";
-
-const getAI = () => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey || apiKey === '') {
-    console.error("Gemini API Key is missing.");
-    return null;
-  }
-  return new GoogleGenAI({ apiKey });
-};
-
-export const generateEmailSummaries = async (): Promise<EmailSummary[]> => {
-  const ai = getAI();
-  if (!ai) return [];
-  try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: "Analyze recent business emails and provide 3 realistic mock summaries for a car shop infrastructure dashboard. Return JSON.",
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              id: { type: Type.STRING },
-              sender: { type: Type.STRING },
-              subject: { type: Type.STRING },
-              summary: { type: Type.STRING },
-              category: { type: Type.STRING, enum: ['URGENT', 'CUSTOMER', 'PARTS', 'ADMIN'] },
-              timestamp: { type: Type.STRING }
-            },
-            required: ['id', 'sender', 'subject', 'summary', 'category', 'timestamp']
-          }
-        }
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Southport AI - Eric Wilson</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+      body {
+        font-family: 'Inter', sans-serif;
+        background-color: #020617;
+        color: #f8fafc;
+        margin: 0;
+        min-height: 100vh;
+        overflow-x: hidden;
       }
-    });
-    return JSON.parse(response.text || '[]');
-  } catch (error) {
-    console.error("Gemini Error:", error);
-    return [];
-  }
-};
-
-export const askAssistant = async (query: string, context: string): Promise<string> => {
-  const ai = getAI();
-  if (!ai) return "AI Configuration Error.";
-  try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: `Context from logs: ${context}\n\nUser Question: ${query}`,
-      config: {
-        systemInstruction: "You are Eric Wilson's AI assistant."
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
       }
-    });
-    return response.text || "No response.";
-  } catch (error) {
-    return "Error connecting to AI.";
+      ::-webkit-scrollbar-track {
+        background: #0f172a; 
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #334155; 
+        border-radius: 10px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #475569; 
+      }
+      @keyframes fade-in {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .animate-fade-in {
+        animation: fade-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "vite": "https://esm.sh/vite@^7.3.0",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.89.0"
   }
-};
-
-export const generateSocialPost = async (topic: string): Promise<string> => {
-  const ai = getAI();
-  if (!ai) return "AI Key Missing.";
-  try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: `Create a professional social media post for an auto shop about: ${topic}.`,
-    });
-    return response.text || "";
-  } catch (error) {
-    return "Generation failed.";
-  }
-};
-
-export const generateReviewEmail = async (clientEmail: string): Promise<string> => {
-  const ai = getAI();
-  if (!ai) return "AI Key Missing.";
-  try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: `Write a short friendly email asking for a Google Review. Client: ${clientEmail}`,
-    });
-    return response.text || "";
-  } catch (error) {
-    return "Drafting failed.";
-  }
-};
+}
+</script>
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./index.tsx"></script>
+  </body>
+</html>
