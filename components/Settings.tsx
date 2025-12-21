@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Server, Key, Link as LinkIcon, AlertTriangle, Clock, Database, ExternalLink } from 'lucide-react';
+import { Save, Server, Key, Link as LinkIcon, AlertTriangle, Clock, Database, ExternalLink, CheckCircle } from 'lucide-react';
 
 const Settings: React.FC = () => {
   const [config, setConfig] = useState({
@@ -12,22 +12,37 @@ const Settings: React.FC = () => {
     supabaseKey: '',
     audioSegmentDuration: '5'
   });
+  const [saveStatus, setSaveStatus] = useState<'IDLE' | 'SAVING' | 'SUCCESS'>('IDLE');
 
   useEffect(() => {
     const saved = localStorage.getItem('southport_config');
     if (saved) {
-      setConfig({ ...config, ...JSON.parse(saved) });
+      try {
+        const parsed = JSON.parse(saved);
+        setConfig(prev => ({ ...prev, ...parsed }));
+      } catch (e) {
+        console.error("Failed to parse config", e);
+      }
     }
   }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setConfig({ ...config, [e.target.name]: e.target.value });
+    if (saveStatus === 'SUCCESS') setSaveStatus('IDLE');
   };
 
   const handleSave = () => {
+    setSaveStatus('SAVING');
     localStorage.setItem('southport_config', JSON.stringify(config));
-    alert('Infrastructure Configuration Synced. Changes are now active.');
-    window.location.reload(); // Refresh to ensure Supabase client re-initializes
+    
+    // Immediate success feedback
+    setTimeout(() => {
+      setSaveStatus('SUCCESS');
+      // Briefly show success before potential reload to re-init services
+      setTimeout(() => {
+        window.location.reload();
+      }, 800);
+    }, 400);
   };
 
   return (
@@ -58,7 +73,7 @@ const Settings: React.FC = () => {
             <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-2xl p-4 mb-6 flex gap-4">
               <AlertTriangle className="text-emerald-500 shrink-0" size={20} />
               <div className="text-[10px] md:text-xs text-emerald-200/70 leading-relaxed font-medium">
-                Find these in your Supabase Dashboard under <strong>Project Settings -> API</strong>. 
+                Find these in your Supabase Dashboard under <strong>Project Settings &rarr; API</strong>. 
                 Use the <code className="bg-emerald-950 px-1 rounded">anon public</code> key.
               </div>
             </div>
@@ -76,7 +91,7 @@ const Settings: React.FC = () => {
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Secret Access Key</label>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Anon Public Key</label>
                 <input 
                   type="password" 
                   name="supabaseKey"
@@ -107,11 +122,11 @@ const Settings: React.FC = () => {
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Social Distribution</label>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Audio Intake (Logger)</label>
                 <input 
                   type="text" 
-                  name="n8nWebhookSocial"
-                  value={config.n8nWebhookSocial}
+                  name="n8nWebhookAudio"
+                  value={config.n8nWebhookAudio}
                   onChange={handleChange}
                   placeholder="https://n8n.eric-infra.com/..."
                   className="w-full bg-slate-900/50 border border-slate-700/80 rounded-xl p-3.5 text-sm text-white focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
@@ -119,59 +134,23 @@ const Settings: React.FC = () => {
               </div>
             </div>
           </div>
-
-          {/* System Logic Section */}
-          <div className="pt-8 border-t border-slate-700/50 flex flex-col md:flex-row gap-8">
-            <div className="flex-1 space-y-4">
-              <h4 className="text-white text-xs font-black uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
-                <Clock size={14} className="text-orange-400" /> Monitoring Cycle
-              </h4>
-              <select 
-                name="audioSegmentDuration"
-                value={config.audioSegmentDuration}
-                onChange={handleChange}
-                className="w-full bg-slate-900/50 border border-slate-700/80 rounded-xl p-3.5 text-sm text-white focus:ring-2 focus:ring-orange-500/50 outline-none appearance-none"
-              >
-                <option value="1">1 Minute (Staging)</option>
-                <option value="5">5 Minutes (Optimized)</option>
-                <option value="15">15 Minutes</option>
-              </select>
-            </div>
-            
-            <div className="flex-1 space-y-4">
-              <h4 className="text-white text-xs font-black uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
-                <Key size={14} className="text-purple-400" /> Telephony Layer
-              </h4>
-              <input 
-                type="password" 
-                name="retellApiKey"
-                value={config.retellApiKey}
-                onChange={handleChange}
-                placeholder="re_..."
-                className="w-full bg-slate-900/50 border border-slate-700/80 rounded-xl p-3.5 text-sm text-white focus:ring-2 focus:ring-purple-500/50 outline-none transition-all"
-              />
-            </div>
-          </div>
         </div>
 
         <div className="mt-12 flex flex-col md:flex-row gap-4 justify-end">
           <button 
             onClick={handleSave}
-            className="group flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-500 text-white px-10 py-4 rounded-2xl font-black uppercase tracking-widest transition-all active:scale-95 shadow-xl shadow-blue-900/20"
+            disabled={saveStatus === 'SAVING'}
+            className={`group flex items-center justify-center gap-3 px-10 py-4 rounded-2xl font-black uppercase tracking-widest transition-all active:scale-95 shadow-xl ${
+              saveStatus === 'SUCCESS' ? 'bg-emerald-600' : 'bg-blue-600 hover:bg-blue-500'
+            } text-white shadow-blue-900/20`}
           >
-            <Save size={20} className="group-hover:rotate-12 transition-transform" /> 
-            Commit Update
+            {saveStatus === 'SUCCESS' ? (
+              <CheckCircle size={20} className="animate-in zoom-in" />
+            ) : (
+              <Save size={20} className={saveStatus === 'SAVING' ? 'animate-spin' : ''} />
+            )}
+            {saveStatus === 'SAVING' ? 'Syncing...' : saveStatus === 'SUCCESS' ? 'Committed' : 'Save Settings'}
           </button>
-        </div>
-      </div>
-
-      <div className="bg-slate-950 border border-slate-800 p-6 rounded-3xl flex gap-5 items-center shadow-inner">
-        <div className="p-3 bg-blue-500/10 rounded-full text-blue-500 shrink-0">
-          <LinkIcon size={24} />
-        </div>
-        <div className="text-[10px] font-medium text-slate-400 leading-relaxed uppercase tracking-wider">
-          <p className="text-white font-black mb-1">Architecture Node</p>
-          Once credentials are saved, the infrastructure transitions from mock simulation to production-grade automation cycles.
         </div>
       </div>
     </div>
