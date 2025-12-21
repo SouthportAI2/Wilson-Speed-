@@ -35,10 +35,8 @@ const Settings: React.FC = () => {
     setSaveStatus('SAVING');
     localStorage.setItem('southport_config', JSON.stringify(config));
     
-    // Immediate success feedback
     setTimeout(() => {
       setSaveStatus('SUCCESS');
-      // Briefly show success before potential reload to re-init services
       setTimeout(() => {
         window.location.reload();
       }, 800);
@@ -46,8 +44,8 @@ const Settings: React.FC = () => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="bg-slate-800 rounded-3xl border border-slate-700/50 p-6 md:p-8 shadow-2xl relative overflow-hidden">
+    <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
+      <div className="bg-slate-800 rounded-3xl border border-slate-700/50 p-6 md:p-8 shadow-2xl relative overflow-hidden text-left">
         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600" />
         
         <div className="flex items-center gap-4 mb-8 border-b border-slate-700/50 pb-6">
@@ -61,7 +59,6 @@ const Settings: React.FC = () => {
         </div>
 
         <div className="space-y-8">
-          {/* Supabase Section */}
           <div className="space-y-4">
             <h4 className="text-white text-xs font-black uppercase tracking-[0.2em] mb-4 flex items-center justify-between">
               <span className="flex items-center gap-2"><Database size={14} className="text-emerald-400" /> Database Layer (Supabase)</span>
@@ -104,7 +101,6 @@ const Settings: React.FC = () => {
             </div>
           </div>
 
-          {/* n8n Section */}
           <div className="pt-8 border-t border-slate-700/50 space-y-4">
             <h4 className="text-white text-xs font-black uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
               <LinkIcon size={14} className="text-green-400" /> Automation Webhooks (n8n)
