@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { Save, Server, Key, Link as LinkIcon, AlertTriangle, Clock } from 'lucide-react';
+import { Save, Server, Key, Link as LinkIcon, AlertTriangle, Clock, Database, ExternalLink } from 'lucide-react';
 
 const Settings: React.FC = () => {
   const [config, setConfig] = useState({
@@ -15,7 +14,6 @@ const Settings: React.FC = () => {
   });
 
   useEffect(() => {
-    // Load saved settings from localStorage on mount
     const saved = localStorage.getItem('southport_config');
     if (saved) {
       setConfig({ ...config, ...JSON.parse(saved) });
@@ -28,163 +26,152 @@ const Settings: React.FC = () => {
 
   const handleSave = () => {
     localStorage.setItem('southport_config', JSON.stringify(config));
-    alert('Configuration saved successfully! The app will now attempt to use these endpoints.');
+    alert('Infrastructure Configuration Synced. Changes are now active.');
+    window.location.reload(); // Refresh to ensure Supabase client re-initializes
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
-      <div className="bg-slate-800 rounded-xl border border-slate-700 p-6">
-        <div className="flex items-center gap-3 mb-6 border-b border-slate-700 pb-4">
-          <Server className="text-blue-400" size={24} />
+    <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="bg-slate-800 rounded-3xl border border-slate-700/50 p-6 md:p-8 shadow-2xl relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600" />
+        
+        <div className="flex items-center gap-4 mb-8 border-b border-slate-700/50 pb-6">
+          <div className="p-3 bg-blue-500/10 rounded-2xl text-blue-400">
+            <Server size={28} />
+          </div>
           <div>
-            <h3 className="text-lg font-bold text-white">System Integrations</h3>
-            <p className="text-sm text-slate-400">Connect your n8n workflows and external APIs here.</p>
+            <h3 className="text-xl font-black tracking-tight text-white uppercase">Infrastructure Core</h3>
+            <p className="text-sm text-slate-400 font-medium">Connect external nodes and database layers.</p>
           </div>
         </div>
 
-        <div className="space-y-6">
-          {/* n8n Section */}
-          <div>
-            <h4 className="text-white font-medium mb-3 flex items-center gap-2">
-              <LinkIcon size={16} className="text-green-400" /> n8n Automation Webhooks
-            </h4>
-            <div className="grid gap-4">
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">Email Summary Webhook (GET)</label>
-                <input 
-                  type="text" 
-                  name="n8nWebhookEmail"
-                  value={config.n8nWebhookEmail}
-                  onChange={handleChange}
-                  placeholder="https://your-n8n-instance.com/webhook/emails"
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm text-white focus:border-blue-500 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">Social Media Poster Webhook (POST)</label>
-                <input 
-                  type="text" 
-                  name="n8nWebhookSocial"
-                  value={config.n8nWebhookSocial}
-                  onChange={handleChange}
-                  placeholder="https://your-n8n-instance.com/webhook/social-post"
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm text-white focus:border-blue-500 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">Office Audio Log Webhook (POST - Receives Audio Blob)</label>
-                <input 
-                  type="text" 
-                  name="n8nWebhookAudio"
-                  value={config.n8nWebhookAudio}
-                  onChange={handleChange}
-                  placeholder="https://your-n8n-instance.com/webhook/audio-upload"
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm text-white focus:border-blue-500 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">Review Request Webhook (POST)</label>
-                <input 
-                  type="text" 
-                  name="n8nWebhookReview"
-                  value={config.n8nWebhookReview}
-                  onChange={handleChange}
-                  placeholder="https://your-n8n-instance.com/webhook/send-review"
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm text-white focus:border-blue-500 focus:outline-none"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Audio Configuration */}
-          <div className="pt-4 border-t border-slate-700">
-            <h4 className="text-white font-medium mb-3 flex items-center gap-2">
-              <Clock size={16} className="text-orange-400" /> Continuous Monitoring Settings
-            </h4>
-            <div>
-              <label className="block text-xs text-slate-400 mb-1">Audio Segment Duration (Minutes)</label>
-              <select 
-                name="audioSegmentDuration"
-                value={config.audioSegmentDuration}
-                onChange={handleChange}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm text-white focus:border-orange-500 focus:outline-none"
-              >
-                <option value="1">1 Minute (Testing)</option>
-                <option value="5">5 Minutes (Recommended)</option>
-                <option value="10">10 Minutes</option>
-                <option value="15">15 Minutes</option>
-                <option value="30">30 Minutes</option>
-              </select>
-              <p className="text-[10px] text-slate-500 mt-1">If "Continuous Monitor Mode" is enabled, the recorder will restart and upload a new file every X minutes.</p>
-            </div>
-          </div>
-
-          {/* Retell AI Section */}
-          <div className="pt-4 border-t border-slate-700">
-            <h4 className="text-white font-medium mb-3 flex items-center gap-2">
-              <Key size={16} className="text-purple-400" /> Retell AI Configuration (Optional)
-            </h4>
-            <div>
-              <label className="block text-xs text-slate-400 mb-1">API Key</label>
-              <input 
-                type="password" 
-                name="retellApiKey"
-                value={config.retellApiKey}
-                onChange={handleChange}
-                placeholder="re_123456789..."
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm text-white focus:border-purple-500 focus:outline-none"
-              />
-              <p className="text-[10px] text-slate-500 mt-1">Only required if using Retell for Telephony (Phone Calls).</p>
-            </div>
-          </div>
-
+        <div className="space-y-8">
           {/* Supabase Section */}
-          <div className="pt-4 border-t border-slate-700">
-            <h4 className="text-white font-medium mb-3 flex items-center gap-2">
-              <Server size={16} className="text-emerald-400" /> Supabase Database
+          <div className="space-y-4">
+            <h4 className="text-white text-xs font-black uppercase tracking-[0.2em] mb-4 flex items-center justify-between">
+              <span className="flex items-center gap-2"><Database size={14} className="text-emerald-400" /> Database Layer (Supabase)</span>
+              <a href="https://supabase.com/dashboard" target="_blank" rel="noreferrer" className="text-emerald-400 hover:text-emerald-300 flex items-center gap-1 normal-case tracking-normal text-[11px] font-bold">
+                Get Credentials <ExternalLink size={10} />
+              </a>
             </h4>
-            <div className="grid gap-4">
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">Project URL</label>
+            
+            <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-2xl p-4 mb-6 flex gap-4">
+              <AlertTriangle className="text-emerald-500 shrink-0" size={20} />
+              <div className="text-[10px] md:text-xs text-emerald-200/70 leading-relaxed font-medium">
+                Find these in your Supabase Dashboard under <strong>Project Settings -> API</strong>. 
+                Use the <code className="bg-emerald-950 px-1 rounded">anon public</code> key.
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Endpoint URL</label>
                 <input 
                   type="text" 
                   name="supabaseUrl"
                   value={config.supabaseUrl}
                   onChange={handleChange}
                   placeholder="https://xyz.supabase.co"
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm text-white focus:border-emerald-500 focus:outline-none"
+                  className="w-full bg-slate-900/50 border border-slate-700/80 rounded-xl p-3.5 text-sm text-white focus:ring-2 focus:ring-emerald-500/50 outline-none transition-all shadow-inner"
                 />
               </div>
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">Anon Public Key</label>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Secret Access Key</label>
                 <input 
                   type="password" 
                   name="supabaseKey"
                   value={config.supabaseKey}
                   onChange={handleChange}
                   placeholder="eyJh..."
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm text-white focus:border-emerald-500 focus:outline-none"
+                  className="w-full bg-slate-900/50 border border-slate-700/80 rounded-xl p-3.5 text-sm text-white focus:ring-2 focus:ring-emerald-500/50 outline-none transition-all shadow-inner"
                 />
               </div>
             </div>
           </div>
+
+          {/* n8n Section */}
+          <div className="pt-8 border-t border-slate-700/50 space-y-4">
+            <h4 className="text-white text-xs font-black uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+              <LinkIcon size={14} className="text-green-400" /> Automation Webhooks (n8n)
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Email Intake</label>
+                <input 
+                  type="text" 
+                  name="n8nWebhookEmail"
+                  value={config.n8nWebhookEmail}
+                  onChange={handleChange}
+                  placeholder="https://n8n.eric-infra.com/..."
+                  className="w-full bg-slate-900/50 border border-slate-700/80 rounded-xl p-3.5 text-sm text-white focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Social Distribution</label>
+                <input 
+                  type="text" 
+                  name="n8nWebhookSocial"
+                  value={config.n8nWebhookSocial}
+                  onChange={handleChange}
+                  placeholder="https://n8n.eric-infra.com/..."
+                  className="w-full bg-slate-900/50 border border-slate-700/80 rounded-xl p-3.5 text-sm text-white focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* System Logic Section */}
+          <div className="pt-8 border-t border-slate-700/50 flex flex-col md:flex-row gap-8">
+            <div className="flex-1 space-y-4">
+              <h4 className="text-white text-xs font-black uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                <Clock size={14} className="text-orange-400" /> Monitoring Cycle
+              </h4>
+              <select 
+                name="audioSegmentDuration"
+                value={config.audioSegmentDuration}
+                onChange={handleChange}
+                className="w-full bg-slate-900/50 border border-slate-700/80 rounded-xl p-3.5 text-sm text-white focus:ring-2 focus:ring-orange-500/50 outline-none appearance-none"
+              >
+                <option value="1">1 Minute (Staging)</option>
+                <option value="5">5 Minutes (Optimized)</option>
+                <option value="15">15 Minutes</option>
+              </select>
+            </div>
+            
+            <div className="flex-1 space-y-4">
+              <h4 className="text-white text-xs font-black uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                <Key size={14} className="text-purple-400" /> Telephony Layer
+              </h4>
+              <input 
+                type="password" 
+                name="retellApiKey"
+                value={config.retellApiKey}
+                onChange={handleChange}
+                placeholder="re_..."
+                className="w-full bg-slate-900/50 border border-slate-700/80 rounded-xl p-3.5 text-sm text-white focus:ring-2 focus:ring-purple-500/50 outline-none transition-all"
+              />
+            </div>
+          </div>
         </div>
 
-        <div className="mt-8 flex justify-end">
+        <div className="mt-12 flex flex-col md:flex-row gap-4 justify-end">
           <button 
             onClick={handleSave}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-lg font-semibold transition-colors"
+            className="group flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-500 text-white px-10 py-4 rounded-2xl font-black uppercase tracking-widest transition-all active:scale-95 shadow-xl shadow-blue-900/20"
           >
-            <Save size={18} /> Save Configurations
+            <Save size={20} className="group-hover:rotate-12 transition-transform" /> 
+            Commit Update
           </button>
         </div>
       </div>
 
-      <div className="bg-amber-500/10 border border-amber-500/20 p-4 rounded-lg flex gap-3">
-        <AlertTriangle className="text-amber-500 shrink-0" />
-        <div className="text-sm text-amber-200">
-          <p className="font-bold mb-1">Developer Mode</p>
-          <p>This dashboard is currently running in prototype mode. Once you configure the n8n webhooks above, the data feeds will switch from mock data to live production data automatically.</p>
+      <div className="bg-slate-950 border border-slate-800 p-6 rounded-3xl flex gap-5 items-center shadow-inner">
+        <div className="p-3 bg-blue-500/10 rounded-full text-blue-500 shrink-0">
+          <LinkIcon size={24} />
+        </div>
+        <div className="text-[10px] font-medium text-slate-400 leading-relaxed uppercase tracking-wider">
+          <p className="text-white font-black mb-1">Architecture Node</p>
+          Once credentials are saved, the infrastructure transitions from mock simulation to production-grade automation cycles.
         </div>
       </div>
     </div>
