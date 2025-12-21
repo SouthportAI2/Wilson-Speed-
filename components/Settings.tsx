@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+  import React, { useState, useEffect } from 'react';
 import { Save, Server, Key, Link as LinkIcon, AlertTriangle, Clock, Database, ExternalLink, ShieldCheck } from 'lucide-react';
 
 const Settings: React.FC = () => {
@@ -34,10 +34,8 @@ const Settings: React.FC = () => {
     const aistudio = (window as any).aistudio;
     if (aistudio) {
       await aistudio.openSelectKey();
-      // instructions specify assuming success
-      setTimeout(() => window.location.reload(), 1000);
     } else {
-      alert("AI Studio environment not detected. If you are on Vercel, please set the API_KEY in your Project Environment Variables.");
+      alert("AI Studio environment not detected. Please ensure you are running in the correct development context.");
     }
   };
 
@@ -66,12 +64,12 @@ const Settings: React.FC = () => {
               <div className="space-y-2 max-w-lg">
                 <p className="text-sm text-slate-300 font-bold">Secure API Handshake</p>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  Your AI infrastructure requires a Google Gemini API Key. Click the button below to authorize. If you are using Vercel, set the key in your dashboard.
+                  Your AI infrastructure requires a valid Google Gemini API Key. Click the button to securely authorize the application using your Google AI Studio credentials.
                 </p>
               </div>
               <button 
                 onClick={handleConnectGemini}
-                className="w-full md:w-auto px-8 py-4 bg-blue-600 hover:bg-blue-500 text-white font-black text-xs uppercase tracking-widest transition-all shadow-lg active:scale-95 rounded-xl border border-blue-400/30"
+                className="w-full md:w-auto px-8 py-4 bg-slate-900 border border-blue-500/30 hover:border-blue-500 rounded-xl text-blue-400 font-black text-xs uppercase tracking-widest transition-all shadow-lg active:scale-95"
               >
                 Connect Gemini Node
               </button>
@@ -90,7 +88,7 @@ const Settings: React.FC = () => {
             <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-2xl p-4 mb-6 flex gap-4">
               <AlertTriangle className="text-emerald-500 shrink-0" size={20} />
               <div className="text-[10px] md:text-xs text-emerald-200/70 leading-relaxed font-medium">
-                Find these in your Supabase Dashboard under <strong>Project Settings &rarr; API</strong>. 
+                Find these in your Supabase Dashboard under <strong>Project Settings {"->"} API</strong>. 
                 Use the <code className="bg-emerald-950 px-1 rounded mx-1">anon public</code> key.
               </div>
             </div>
