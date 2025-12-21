@@ -6,6 +6,7 @@ import AudioLogger from './components/AudioLogger';
 import SocialPoster from './components/SocialPoster';
 import ReviewBooster from './components/ReviewBooster';
 import Settings from './components/Settings';
+import { Diagnostics } from './components/Diagnostics';
 import { ViewState } from './types';
 
 const App: React.FC = () => {
@@ -35,6 +36,7 @@ const App: React.FC = () => {
       <div className="animate-fade-in">
         {renderView()}
       </div>
+      <Diagnostics />
     </Layout>
   );
 };
