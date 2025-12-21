@@ -1,17 +1,18 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import type { EmailSummary } from "../types";
 
-let aiInstance: GoogleGenAI | null = null;
-
+/**
+ * Fix: Removed global aiInstance cache to ensure new instances are created with the latest API key
+ * as per security and session guidelines for environments that support key selection.
+ */
 const getAI = () => {
   const apiKey = process.env.API_KEY;
   if (!apiKey) {
     throw new Error("CRITICAL_ERROR: process.env.API_KEY is undefined. AI Services cannot initialize.");
   }
-  if (!aiInstance) {
-    aiInstance = new GoogleGenAI({ apiKey });
-  }
-  return aiInstance;
+  // Create a new instance right before making an API call to ensure it always uses 
+  // the most up-to-date API key from the environment.
+  return new GoogleGenAI({ apiKey });
 };
 
 export const generateEmailSummaries = async (): Promise<EmailSummary[]> => {
@@ -43,6 +44,7 @@ export const generateEmailSummaries = async (): Promise<EmailSummary[]> => {
       }
     });
     
+    // Fix: Using response.text property (not a method) as per SDK guidelines.
     return JSON.parse(response.text || "[]");
   } catch (error) {
     console.error("Error generating email summaries:", error);
@@ -61,6 +63,7 @@ export const askAssistant = async (query: string, context: string): Promise<stri
       }
     });
     
+    // Fix: Accessing text property directly.
     return response.text || "Query returned no data.";
   } catch (error) {
     console.error("Error with AI assistant:", error);
@@ -79,6 +82,7 @@ export const generateSocialPost = async (topic: string): Promise<string> => {
       }
     });
     
+    // Fix: Accessing text property directly.
     return response.text || "Failed to generate post.";
   } catch (error) {
     console.error("Error generating social post:", error);
@@ -97,6 +101,7 @@ export const generateReviewEmail = async (clientEmail: string): Promise<string> 
       }
     });
     
+    // Fix: Accessing text property directly.
     return response.text || "Failed to generate email.";
   } catch (error) {
     console.error("Error generating review email:", error);
