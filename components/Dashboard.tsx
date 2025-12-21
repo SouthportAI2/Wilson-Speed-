@@ -1,5 +1,5 @@
 import React from 'react';
-import { Mail, Mic, Share2, Star, Shield, Zap, ArrowRight, Activity } from 'lucide-react';
+import { Mail, Mic, Share2, Star, Shield, Zap, ArrowRight } from 'lucide-react';
 import { ViewState } from '../types';
 
 interface BoxProps {
@@ -13,7 +13,7 @@ interface BoxProps {
 const Box: React.FC<BoxProps> = ({ title, description, icon: Icon, onClick, color }) => (
   <button 
     onClick={onClick}
-    className="group relative flex flex-col items-start p-8 bg-slate-900/40 border border-slate-800 rounded-[2.5rem] hover:border-blue-500/50 hover:bg-slate-900/60 transition-all duration-500 text-left overflow-hidden shadow-2xl backdrop-blur-md"
+    className="group relative flex flex-col items-start p-8 bg-slate-900/40 border border-slate-800 rounded-[2.5rem] hover:border-blue-500/50 hover:bg-slate-900/60 transition-all duration-500 text-left overflow-hidden shadow-2xl backdrop-blur-md h-full"
   >
     <div className={`absolute -top-10 -right-10 w-40 h-40 bg-gradient-to-br ${color} opacity-0 group-hover:opacity-10 blur-3xl transition-opacity`} />
     <div className={`p-4 rounded-2xl bg-slate-950 border border-slate-800 mb-6 group-hover:scale-110 transition-transform ${color.replace('from-', 'text-').split(' ')[0]}`}>
@@ -21,7 +21,7 @@ const Box: React.FC<BoxProps> = ({ title, description, icon: Icon, onClick, colo
     </div>
     <h3 className="text-2xl font-black text-white mb-2 tracking-tight group-hover:text-blue-400 transition-colors">{title}</h3>
     <p className="text-slate-400 text-sm font-medium leading-relaxed">{description}</p>
-    <div className="mt-8 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-600 group-hover:text-blue-400 transition-colors">
+    <div className="mt-auto pt-8 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-600 group-hover:text-blue-400 transition-colors">
       <Zap size={10} /> Access Node <ArrowRight size={12} className="group-hover:translate-x-1 transition-transform" />
     </div>
   </button>
@@ -34,13 +34,13 @@ interface DashboardProps {
 const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
   return (
     <div className="max-w-6xl mx-auto space-y-16 py-8">
-      <header className="space-y-4 animate-fade-in">
+      <header className="space-y-4 animate-fade-in text-left">
         <div className="flex items-center gap-2 text-blue-500 text-[10px] font-black uppercase tracking-[0.3em]">
           <Shield size={14} /> Core System / Active
         </div>
         <h1 className="text-5xl md:text-7xl font-black text-white tracking-tighter leading-[1.1]">
           Welcome to Eric Wilsons <br />
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-500">
+          <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-500 italic">
             Person AI infrastructure.
           </span>
         </h1>
@@ -79,28 +79,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
           color="from-emerald-600 to-teal-400"
         />
       </div>
-
-      <footer className="bg-slate-900/20 border border-slate-800/50 rounded-3xl p-8 flex flex-col md:flex-row items-center justify-between gap-6 backdrop-blur-sm animate-fade-in" style={{ animationDelay: '300ms' }}>
-        <div className="flex items-center gap-4">
-          <div className="p-3 bg-slate-900 rounded-xl border border-slate-800">
-            <Activity className="text-emerald-500 animate-pulse" size={24} />
-          </div>
-          <div>
-            <div className="text-white font-bold text-sm uppercase tracking-widest text-left">Neural Mesh Connectivity</div>
-            <div className="text-slate-500 text-xs text-left">All processing nodes report optimal health. Encryption active.</div>
-          </div>
-        </div>
-        <div className="flex gap-8">
-          <div className="text-center">
-            <div className="text-white font-black text-xl">42ms</div>
-            <div className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Latency</div>
-          </div>
-          <div className="text-center">
-            <div className="text-emerald-500 font-black text-xl">100%</div>
-            <div className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Uptime</div>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 };
