@@ -7,7 +7,6 @@ import {
   Star, 
   Settings as SettingsIcon,
   Shield,
-  Activity,
   Menu,
   X
 } from 'lucide-react';
@@ -68,13 +67,8 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onNavigate }) =>
 
         <div className="p-4 mt-auto border-t border-slate-800">
           <div className="bg-slate-900/50 rounded-xl p-4 border border-slate-800">
-            <div className="flex items-center gap-2 mb-2 text-blue-400">
-              <Activity size={14} className="animate-pulse" />
-              <span className="text-[10px] font-black uppercase tracking-widest">System Status</span>
-            </div>
-            <div className="text-[10px] text-slate-500 font-medium">
-              Core: Online<br />
-              Nodes: Active (4/4)
+            <div className="text-[10px] text-slate-500 font-medium uppercase tracking-widest text-center">
+              Infrastructure Core 1.0
             </div>
           </div>
         </div>
@@ -124,10 +118,6 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onNavigate }) =>
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1 bg-emerald-500/10 rounded-full border border-emerald-500/20">
-               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-               <span className="text-[10px] font-black uppercase text-emerald-500 tracking-widest">Nodes Active</span>
-            </div>
             <div className="h-8 w-8 rounded-full bg-blue-600 flex items-center justify-center text-[10px] font-black shadow-lg shadow-blue-900/20">EW</div>
           </div>
         </header>
