@@ -14,4 +14,4 @@ export default defineConfig(({ mode }) => {
       'process.env.API_KEY': JSON.stringify(env.API_KEY || process.env.API_KEY || ''),
     }
   };
-});
+});a
