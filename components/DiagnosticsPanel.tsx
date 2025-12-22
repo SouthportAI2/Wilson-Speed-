@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   CheckCircle, 
   XCircle, 
@@ -9,15 +8,11 @@ import {
   Shield, 
   Database, 
   Zap, 
-  Globe, 
-  Cpu, 
-  Terminal,
   AlertTriangle,
   RefreshCw,
   Clock,
   Trash2
 } from 'lucide-react';
-import { GoogleGenAI } from "@google/genai";
 import { getSupabaseClient } from '../services/supabaseClient.ts';
 
 interface DiagnosticCheck {
@@ -30,13 +25,11 @@ interface DiagnosticCheck {
   category: 'ENV' | 'API' | 'SYSTEM';
 }
 
-export const DiagnosticsPanel: React.FC = () => {
+const DiagnosticsPanel: React.FC = () => {
   const [checks, setChecks] = useState<DiagnosticCheck[]>([
-    { id: 'env-api-key', name: 'Gemini API Key', description: 'Checks if process.env.API_KEY is defined.', status: 'PENDING', category: 'ENV' },
     { id: 'env-supabase', name: 'Supabase Credentials', description: 'Checks for Supabase URL and Anon Key in settings.', status: 'PENDING', category: 'ENV' },
     { id: 'env-n8n', name: 'n8n Webhook Configuration', description: 'Verifies at least one n8n webhook is configured.', status: 'PENDING', category: 'ENV' },
-    { id: 'api-gemini', name: 'Gemini Connectivity', description: 'Tests connection to Gemini-3-Flash node.', status: 'PENDING', category: 'API' },
-    { id: 'api-supabase', name: 'Supabase Handshake', description: 'Performs a test query on the archive cluster.', status: 'PENDING', category: 'API' },
+    { id: 'api-supabase', name: 'Supabase Connection', description: 'Performs a test query on the database.', status: 'PENDING', category: 'API' },
     { id: 'api-n8n', name: 'n8n Webhook Ping', description: 'Sends a test packet to the primary n8n node.', status: 'PENDING', category: 'API' },
     { id: 'sys-react', name: 'React Mount Integrity', description: 'Verifies the application root is properly initialized.', status: 'PENDING', category: 'SYSTEM' },
     { id: 'sys-browser', name: 'Browser Capabilities', description: 'Checks for MediaRecorder, Fetch, and AudioContext support.', status: 'PENDING', category: 'SYSTEM' },
@@ -63,12 +56,10 @@ export const DiagnosticsPanel: React.FC = () => {
     setChecks(prev => prev.map(c => ({ ...c, status: 'PENDING', message: undefined, details: undefined })));
 
     try {
-      await testEnvApiKey();
       await testEnvSupabase();
       await testEnvN8N();
       await testSysBrowser();
       await testSysReact();
-      await testApiGemini();
       await testApiSupabase();
       await testApiN8N();
     } finally {
@@ -76,62 +67,29 @@ export const DiagnosticsPanel: React.FC = () => {
     }
   };
 
-  const testEnvApiKey = async () => {
-    updateCheck('env-api-key', { status: 'RUNNING' });
-    const key = process.env.API_KEY;
-    if (key && key.length > 5) {
-      updateCheck('env-api-key', { status: 'PASS', message: 'API_KEY found in environment.' });
-    } else {
-      updateCheck('env-api-key', { status: 'FAIL', message: 'API_KEY is missing.', details: 'The application requires a valid Gemini API Key. Use the AI Studio dialog if not set via environment.' });
-    }
-  };
-
   const testEnvSupabase = async () => {
     updateCheck('env-supabase', { status: 'RUNNING' });
-    const stored = localStorage.getItem('southport_config');
-    if (!stored) {
-      updateCheck('env-supabase', { status: 'FAIL', message: 'Settings empty.' });
-      return;
-    }
-    const config = JSON.parse(stored);
-    if (config.supabaseUrl && config.supabaseKey) {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    
+    if (supabaseUrl && supabaseKey) {
       updateCheck('env-supabase', { status: 'PASS', message: 'Supabase credentials detected.' });
     } else {
-      updateCheck('env-supabase', { status: 'FAIL', message: 'Incomplete credentials.' });
+      const missing = [];
+      if (!supabaseUrl) missing.push('VITE_SUPABASE_URL');
+      if (!supabaseKey) missing.push('VITE_SUPABASE_ANON_KEY');
+      updateCheck('env-supabase', { status: 'FAIL', message: 'Missing credentials.', details: `Missing: ${missing.join(', ')}` });
     }
   };
 
   const testEnvN8N = async () => {
     updateCheck('env-n8n', { status: 'RUNNING' });
-    const stored = localStorage.getItem('southport_config');
-    const config = stored ? JSON.parse(stored) : {};
-    if (config.n8nWebhookEmail || config.n8nWebhookAudio) {
-      updateCheck('env-n8n', { status: 'PASS', message: 'Webhook nodes detected.' });
+    const webhookUrl = import.meta.env.VITE_N8N_WEBHOOK_URL;
+    
+    if (webhookUrl && webhookUrl.startsWith('http')) {
+      updateCheck('env-n8n', { status: 'PASS', message: 'n8n webhook configured.' });
     } else {
-      updateCheck('env-n8n', { status: 'FAIL', message: 'No n8n webhooks configured.' });
-    }
-  };
-
-  const testApiGemini = async () => {
-    updateCheck('api-gemini', { status: 'RUNNING' });
-    const apiKey = process.env.API_KEY;
-    if (!apiKey) {
-      updateCheck('api-gemini', { status: 'FAIL', message: 'API_KEY missing, cannot test.' });
-      return;
-    }
-    try {
-      const ai = new GoogleGenAI({ apiKey });
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: 'hi',
-      });
-      if (response.text) {
-        updateCheck('api-gemini', { status: 'PASS', message: 'Gemini handshake active.' });
-      } else {
-        throw new Error("Invalid node response.");
-      }
-    } catch (e: any) {
-      updateCheck('api-gemini', { status: 'FAIL', message: 'Connection failure.', details: e.message });
+      updateCheck('env-n8n', { status: 'FAIL', message: 'No n8n webhook configured.', details: 'VITE_N8N_WEBHOOK_URL is missing or invalid.' });
     }
   };
 
@@ -140,40 +98,37 @@ export const DiagnosticsPanel: React.FC = () => {
     try {
       const supabase = getSupabaseClient();
       if (!supabase) {
-        updateCheck('api-supabase', { status: 'FAIL', message: 'Client creation failed.', details: 'Check if URL and Key are valid in Settings.' });
+        updateCheck('api-supabase', { status: 'FAIL', message: 'Client creation failed.' });
         return;
       }
       const { error } = await supabase.from('audio_logs').select('count', { count: 'exact', head: true });
       if (error) throw error;
-      updateCheck('api-supabase', { status: 'PASS', message: 'Archive handshake successful.' });
+      updateCheck('api-supabase', { status: 'PASS', message: 'Database connection successful.' });
     } catch (e: any) {
-      updateCheck('api-supabase', { status: 'FAIL', message: 'Handshake failed.', details: e.message });
+      updateCheck('api-supabase', { status: 'FAIL', message: 'Connection failed.', details: e.message });
     }
   };
 
   const testApiN8N = async () => {
     updateCheck('api-n8n', { status: 'RUNNING' });
-    const stored = localStorage.getItem('southport_config');
-    const config = stored ? JSON.parse(stored) : {};
-    const url = config.n8nWebhookEmail || config.n8nWebhookAudio;
+    const url = import.meta.env.VITE_N8N_WEBHOOK_URL;
+    
     if (!url) {
-      updateCheck('api-n8n', { status: 'FAIL', message: 'No target node for ping.' });
+      updateCheck('api-n8n', { status: 'FAIL', message: 'No webhook URL configured.' });
       return;
     }
+    
     try {
-      const controller = new AbortController();
-      const id = setTimeout(() => controller.abort(), 5000);
       const res = await fetch(url, { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'DIAGNOSTIC_PING' }),
-        signal: controller.signal
+        body: JSON.stringify({ action: 'DIAGNOSTIC_PING', timestamp: Date.now() })
       });
-      clearTimeout(id);
+      
       if (res.ok) {
-        updateCheck('api-n8n', { status: 'PASS', message: 'Primary node pinged.' });
+        updateCheck('api-n8n', { status: 'PASS', message: 'n8n webhook responding.' });
       } else {
-        updateCheck('api-n8n', { status: 'FAIL', message: `HTTP ${res.status}` });
+        updateCheck('api-n8n', { status: 'FAIL', message: `HTTP ${res.status}`, details: 'Webhook returned non-200 status.' });
       }
     } catch (e: any) {
       updateCheck('api-n8n', { status: 'FAIL', message: 'Network timeout.', details: e.message });
