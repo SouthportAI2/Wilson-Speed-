@@ -84,6 +84,7 @@ const AudioLogger: React.FC = () => {
 
     setLogs(unique.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
     setIsSyncing(false);
+    localStorage.removeItem(LOCAL_LOGS_KEY);
   }, []);
 
   const finalizeLog = async (audioBlob: Blob, monitoring: boolean, segmentDuration: number) => {
