@@ -6,7 +6,7 @@ import AudioLogger from './components/AudioLogger';
 import SocialPoster from './components/SocialPoster';
 import ReviewBooster from './components/ReviewBooster';
 import Settings from './components/Settings';
-import { Diagnostics } from './components/Diagnostics';
+import DiagnosticsPanel from './components/DiagnosticsPanel';
 import { ViewState } from './types';
 
 const App: React.FC = () => {
@@ -20,10 +20,12 @@ const App: React.FC = () => {
         return <EmailSummaries />;
       case ViewState.AUDIO_LOGS:
         return <AudioLogger />;
-      case ViewState.SOCIAL_MEDIA:
-        return <SocialPoster />;
       case ViewState.REVIEWS:
         return <ReviewBooster />;
+      case ViewState.SOCIAL_MEDIA:
+        return <SocialPoster />;
+      case ViewState.DIAGNOSTICS:
+        return <DiagnosticsPanel />;
       case ViewState.SETTINGS:
         return <Settings />;
       default:
@@ -33,10 +35,9 @@ const App: React.FC = () => {
 
   return (
     <Layout currentView={currentView} onNavigate={setCurrentView}>
-      <div className="animate-fade-in">
+      <div className="animate-in fade-in duration-500">
         {renderView()}
       </div>
-      <Diagnostics />
     </Layout>
   );
 };
