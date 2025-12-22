@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Mic, Search, Square, RefreshCw, Clock, Bot, Database, Terminal, AlertTriangle, CheckCircle, Volume2, HardDrive, Zap, Repeat, Settings2, Activity, ChevronRight, Circle } from 'lucide-react';
 import { askAssistant } from '../services/gemini';
@@ -89,7 +88,6 @@ const AudioLogger: React.FC = () => {
 
   const finalizeLog = async (audioBlob: Blob, monitoring: boolean, segmentDuration: number) => {
     const configData = JSON.parse(localStorage.getItem(CONFIG_KEY) || '{}');
-    const supabase = getSupabaseClient();
     
     const tempId = `${monitoring ? 'MON-' : 'REC-'}${Date.now()}`;
     const newLog: AudioLog = {
@@ -115,16 +113,12 @@ const AudioLogger: React.FC = () => {
         timestamp: newLog.timestamp,
         is_monitor: monitoring 
       }));
-      fetch(configData.n8nWebhookAudio, { method: 'POST', body: formData }).catch(e => console.error("n8n Sync failed", e));
-    }
-
-    if (supabase) {
-      supabase.from('audio_logs').insert([{
-        customer_name: monitoring ? 'MONITOR SEGMENT' : 'SHOP SESSION',
-        duration: formatTime(segmentDuration),
-        transcript: monitoring ? 'MONITORING ACTIVE. SEGMENT COMMITTED.' : 'CAPTURE COMPLETE. PROCESSING INITIATED.',
-        tags: monitoring ? ['MONITOR', 'AUTO'] : ['AUTO']
-      }]).then(() => fetchLogs());
+      
+      fetch(configData.n8nWebhookAudio, { method: 'POST', body: formData })
+        .then(() => {
+          setTimeout(() => fetchLogs(), 3000);
+        })
+        .catch(e => console.error("n8n Sync failed", e));
     }
   };
 
