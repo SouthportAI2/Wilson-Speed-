@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { 
   LayoutDashboard, 
@@ -8,7 +9,8 @@ import {
   Settings as SettingsIcon,
   Shield,
   Menu,
-  X
+  X,
+  Activity
 } from 'lucide-react';
 import { ViewState } from '../types';
 
@@ -27,6 +29,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onNavigate }) =>
     { id: ViewState.AUDIO_LOGS, label: 'Audio Logger', icon: Mic },
     { id: ViewState.SOCIAL_MEDIA, label: 'Social Poster', icon: Share2 },
     { id: ViewState.REVIEWS, label: 'Review Booster', icon: Star },
+    { id: ViewState.DIAGNOSTICS, label: 'Diagnostics', icon: Activity },
     { id: ViewState.SETTINGS, label: 'Settings', icon: SettingsIcon },
   ];
 
