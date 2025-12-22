@@ -6,6 +6,7 @@ export enum ViewState {
   SOCIAL_MEDIA = 'SOCIAL_MEDIA',
   REVIEWS = 'REVIEWS',
   SETTINGS = 'SETTINGS',
+  DIAGNOSTICS = 'DIAGNOSTICS',
 }
 
 export interface EmailSummary {
@@ -28,19 +29,15 @@ export interface AudioLog {
   audioUrl?: string;
 }
 
-export interface SocialPost {
-  id: string;
-  platform: 'Facebook' | 'Instagram';
-  content: string;
-  status: 'Published' | 'Scheduled' | 'Draft';
-  scheduledFor?: string;
-  engagement?: string;
-  imageUrl?: string;
-}
-
-export interface ReviewRequest {
-  email: string;
-  status: 'Sent' | 'Pending';
-  generatedContent?: string;
-  sentAt?: string;
+export interface InfrastructureConfig {
+  n8nWebhookEmail: string;
+  n8nWebhookAudio: string;
+  n8nWebhookSocial: string;
+  n8nWebhookReview: string;
+  supabaseUrl: string;
+  supabaseKey: string;
+  // Business Profile
+  businessName: string;
+  businessPhone: string;
+  googleMapsLink: string;
 }
