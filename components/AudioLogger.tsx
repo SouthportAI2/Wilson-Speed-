@@ -71,8 +71,9 @@ const AudioLogger: React.FC = () => {
 
     const localData = localStorage.getItem(LOCAL_LOGS_KEY);
     const cachedLogs: AudioLog[] = localData ? JSON.parse(localData) : [];
+    const filteredCache = cloudLogs.length > 0 ? [] : cachedLogs;
 
-    const combined = [...cachedLogs, ...cloudLogs];
+    const combined = [...filteredCache, ...cloudLogs];
     const unique = combined.reduce((acc, current) => {
       const x = acc.find(item => item.id === current.id);
       if (!x) {
