@@ -55,7 +55,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
             </div>
             <h1 className="text-4xl md:text-6xl font-bold text-white tracking-tight leading-[1.1]">
               Welcome to Eric Wilsons <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-600">Person AI infrastructure.</span>
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-600">Personal AI infrastructure.</span>
             </h1>
             <p className="text-slate-400 text-lg font-medium mt-6 max-w-2xl leading-relaxed">
               Intelligent automation nodes optimized for performance, 
