@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Mic, Search, Square, RefreshCw, Clock, Bot, Database, Terminal, AlertTriangle, CheckCircle, Volume2, HardDrive, Zap, Repeat, Settings2, Activity, ChevronRight, Circle } from 'lucide-react';
-import { askAssistant } from '../services/gemini';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Search, RefreshCw, Clock, HardDrive } from 'lucide-react';
 import { getSupabaseClient } from '../services/supabaseClient';
 import { AudioLog } from '../types';
 
@@ -18,27 +17,12 @@ const AudioLogger: React.FC = () => {
   const [logs, setLogs] = useState<AudioLog[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLog, setSelectedLog] = useState<AudioLog | null>(null);
-  const [isRecording, setIsRecording] = useState(false);
-  const [isMonitoringMode, setIsMonitoringMode] = useState(false);
-  const [duration, setDuration] = useState(0);
-  const [syncStatus, setSyncStatus] = useState<string>('READY');
   const [isSyncing, setIsSyncing] = useState(false);
+  const [selectedDay, setSelectedDay] = useState<string>(
+    new Date().toLocaleDateString('en-US', { weekday: 'long' })
+  );
 
-  const [assistant, setAssistant] = useState({
-    query: '',
-    response: '',
-    isThinking: false,
-  });
-
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const chunksRef = useRef<BlobPart[]>([]);
-  const durationTimerRef = useRef<number | null>(null);
-  
-  const isMonitoringModeRef = useRef(isMonitoringMode);
-  useEffect(() => {
-    isMonitoringModeRef.current = isMonitoringMode;
-  }, [isMonitoringMode]);
+  const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 
   const fetchLogs = useCallback(async () => {
     setIsSyncing(true);
@@ -51,18 +35,32 @@ const AudioLogger: React.FC = () => {
           .from('audio_logs')
           .select('*')
           .order('created_at', { ascending: false })
-          .limit(30);
+          .limit(50);
 
         if (!error && data) {
-          cloudLogs = data.map(item => ({
-            id: item.id.toString(),
-            timestamp: new Date(item.created_at).toLocaleString(),
-            customerName: item.customer_name || 'SHOP SESSION',
-            vehicle: item.vehicle || 'SHOP FLOOR',
-            duration: item.duration || 'CAPTURED',
-            transcriptPreview: item.transcript || item.summary || 'PROCESSING...',
-            tags: item.tags || ['CLOUD'],
-          }));
+          cloudLogs = data.map(item => {
+            // Parse customers array from new JSONB column
+            const customers = item.customers || [];
+            
+            // Extract customer names for display
+            const customerNames = customers.map((c: any) => c.name).filter(Boolean);
+            const displayName = customerNames.length > 0 
+              ? customerNames.join(', ') 
+              : 'SHOP SESSION';
+            
+            // Get first customer's vehicle if available
+            const firstVehicle = customers[0]?.vehicle || 'SHOP FLOOR';
+            
+            return {
+              id: item.id.toString(),
+              timestamp: new Date(item.created_at).toLocaleString(),
+              customerName: displayName,
+              vehicle: firstVehicle,
+              duration: 'CAPTURED',
+              transcriptPreview: item.segment_summary || item.transcript || 'PROCESSING...',
+              tags: item.service_tags || item.tags || ['CLOUD'],
+            };
+          });
         }
       } catch (err) {
         console.warn("Cloud connection limited.");
@@ -71,26 +69,34 @@ const AudioLogger: React.FC = () => {
 
     const localData = localStorage.getItem(LOCAL_LOGS_KEY);
     const cachedLogs: AudioLog[] = localData ? JSON.parse(localData) : [];
-    const filteredCache = cloudLogs.length > 0 ? [] : cachedLogs;
 
-    const combined = [...filteredCache, ...cloudLogs];
+    // Smarter Deduplication
+    const combined = [...cachedLogs, ...cloudLogs];
     const unique = combined.reduce((acc, current) => {
-      const x = acc.find(item => item.id === current.id);
-      if (!x) {
-        return acc.concat([current]);
-      } else {
-        return acc;
+      if (acc.find(item => item.id === current.id)) return acc;
+
+      if (current.tags.includes('LOCAL')) {
+        const hasCloudEquivalent = cloudLogs.some(cloud => {
+          const cloudTime = new Date(cloud.timestamp).getTime();
+          const localTime = new Date(current.timestamp).getTime();
+          return Math.abs(cloudTime - localTime) < 60000;
+        });
+        if (hasCloudEquivalent) return acc;
       }
+
+      return acc.concat([current]);
     }, [] as AudioLog[]);
 
     setLogs(unique.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
     setIsSyncing(false);
-    localStorage.removeItem(LOCAL_LOGS_KEY);
+    
+    if (cloudLogs.length > 0) {
+      localStorage.removeItem(LOCAL_LOGS_KEY);
+    }
   }, []);
 
   const finalizeLog = async (audioBlob: Blob, monitoring: boolean, segmentDuration: number) => {
     const configData = JSON.parse(localStorage.getItem(CONFIG_KEY) || '{}');
-    
     const tempId = `${monitoring ? 'MON-' : 'REC-'}${Date.now()}`;
     const newLog: AudioLog = {
       id: tempId,
@@ -104,346 +110,163 @@ const AudioLogger: React.FC = () => {
 
     const existingCache = JSON.parse(localStorage.getItem(LOCAL_LOGS_KEY) || '[]');
     localStorage.setItem(LOCAL_LOGS_KEY, JSON.stringify([newLog, ...existingCache]));
-    
     setLogs(prev => [newLog, ...prev]);
 
     if (configData.n8nWebhookAudio) {
       const formData = new FormData();
       formData.append('file', audioBlob, `${tempId}.webm`);
-      formData.append('metadata', JSON.stringify({ 
-        id: tempId, 
-        timestamp: newLog.timestamp,
-        is_monitor: monitoring 
-      }));
-      
+      formData.append('metadata', JSON.stringify({ id: tempId, timestamp: newLog.timestamp, is_monitor: monitoring }));
       fetch(configData.n8nWebhookAudio, { method: 'POST', body: formData })
-        .then(() => {
-          setTimeout(() => fetchLogs(), 3000);
-        })
+        .then(() => setTimeout(() => fetchLogs(), 3000))
         .catch(e => console.error("n8n Sync failed", e));
     }
   };
 
-  const startRecording = useCallback(async () => {
-    try {
-      if (!streamRef.current) {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        streamRef.current = stream;
-      }
-
-      const recorder = new MediaRecorder(streamRef.current!);
-      mediaRecorderRef.current = recorder;
-      chunksRef.current = [];
-
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
-
-      recorder.onstop = async () => {
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-        setDuration(prev => {
-          finalizeLog(blob, isMonitoringModeRef.current, prev);
-          return prev;
-        });
-      };
-
-      recorder.start();
-      setIsRecording(true);
-      setDuration(0);
-      setSyncStatus(isMonitoringModeRef.current ? 'MONITORING' : 'RECORDING');
-
-      if (durationTimerRef.current) clearInterval(durationTimerRef.current);
-      durationTimerRef.current = window.setInterval(() => {
-        setDuration(prev => {
-          const next = prev + 1;
-          if (isMonitoringModeRef.current && next >= SPLIT_INTERVAL_SECONDS) {
-            splitMonitorSession();
-          }
-          return next;
-        });
-      }, 1000);
-    } catch (err) {
-      setSyncStatus('MIC ERROR');
-    }
-  }, []);
-
-  const stopEverything = useCallback(() => {
-    if (durationTimerRef.current) clearInterval(durationTimerRef.current);
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
-    }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop());
-      streamRef.current = null;
-    }
-    setIsRecording(false);
-    setSyncStatus('READY');
-  }, []);
-
-  const splitMonitorSession = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
-      setTimeout(() => {
-        if (isMonitoringModeRef.current) {
-          startRecording();
-        }
-      }, 100);
-    }
-  };
-
-  const handleToggleMonitoring = async () => {
-    const nextMode = !isMonitoringMode;
-    setIsMonitoringMode(nextMode);
-
-    if (nextMode) {
-      await startRecording();
-    } else {
-      if (isRecording) {
-        stopEverything();
-      }
-    }
-  };
-
-  const handleAssistantAsk = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!assistant.query.trim() || !selectedLog) return;
-    setAssistant(prev => ({ ...prev, isThinking: true }));
-    const response = await askAssistant(assistant.query, selectedLog.transcriptPreview);
-    setAssistant(prev => ({ ...prev, response, isThinking: false }));
-  };
-
   useEffect(() => {
     fetchLogs();
-    return () => {
-      if (durationTimerRef.current) clearInterval(durationTimerRef.current);
-    };
   }, [fetchLogs]);
 
-  const filteredLogs = useMemo(() => logs.filter(l => 
-    !searchQuery || 
-    l.customerName.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    l.transcriptPreview.toLowerCase().includes(searchQuery.toLowerCase())
-  ), [logs, searchQuery]);
+  const getCurrentWeekStart = () => {
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+    const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() + diff);
+    monday.setHours(0, 0, 0, 0);
+    return monday;
+  };
+
+  const filteredLogs = useMemo(() => {
+    const weekStart = getCurrentWeekStart();
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 5);
+
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      return logs.filter(log => {
+        const searchableText = [
+          log.customerName,
+          log.vehicle,
+          log.transcriptPreview,
+          ...(log.tags || [])
+        ].join(' ').toLowerCase();
+        return searchableText.includes(query);
+      });
+    } else {
+      return logs.filter(log => {
+        const logDate = new Date(log.timestamp);
+        const logDay = logDate.toLocaleDateString('en-US', { weekday: 'long' });
+        return logDay === selectedDay && logDate >= weekStart && logDate < weekEnd;
+      });
+    }
+  }, [logs, selectedDay, searchQuery]);
 
   return (
-    <div className="flex flex-col lg:flex-row gap-6 h-[calc(100vh-140px)] animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex-1 flex flex-col gap-6">
-        {/* MODERN CONTROL HUB */}
-        <div className="bg-slate-900/40 backdrop-blur-md border border-slate-800 rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/5 blur-[100px] -mr-32 -mt-32" />
-          
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
-            <div className="flex items-center gap-5">
-              <div className={`p-4 rounded-2xl ${isRecording ? 'bg-red-500/20 text-red-500 animate-pulse' : 'bg-blue-600 text-white shadow-xl shadow-blue-900/20'}`}>
-                {isRecording ? <Activity size={28} /> : <Mic size={28} />}
-              </div>
-              <div>
-                <h3 className="text-2xl font-bold text-white tracking-tight">Audio Logs</h3>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className={`text-[10px] font-bold uppercase tracking-widest ${isRecording ? (isMonitoringMode ? 'text-blue-400' : 'text-red-400') : 'text-slate-500'}`}>
-                    {isMonitoringMode ? 'MONITOR ACTIVE' : syncStatus}
-                  </span>
-                  <div className={`w-1.5 h-1.5 rounded-full ${isRecording ? 'bg-red-500' : 'bg-emerald-500'}`} />
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 bg-slate-950/50 p-2 rounded-2xl border border-slate-800/50">
-              <div className="flex items-center gap-3 px-4 py-2">
-                <Repeat size={16} className={isMonitoringMode ? 'text-blue-400' : 'text-slate-500'} />
-                <span className="text-xs font-bold text-slate-300 uppercase tracking-widest">Continuous Monitor</span>
-                <button 
-                  onClick={handleToggleMonitoring}
-                  className={`relative w-11 h-6 transition-colors rounded-full focus:outline-none ${isMonitoringMode ? 'bg-blue-600' : 'bg-slate-700'}`}
-                >
-                  <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${isMonitoringMode ? 'translate-x-5' : 'translate-x-0'}`} />
-                </button>
-              </div>
-              <div className="w-[1px] h-8 bg-slate-800" />
-              <button onClick={fetchLogs} className="p-3 text-slate-400 hover:text-white transition-colors">
-                <RefreshCw size={20} className={isSyncing ? 'animate-spin' : ''} />
-              </button>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-6">
-            {isRecording ? (
-              <div className="bg-slate-950/80 rounded-3xl border border-slate-800 p-8 flex flex-col items-center justify-center gap-6 shadow-inner group">
-                <div className="flex flex-col items-center">
-                  {isMonitoringMode ? (
-                    <div className="flex flex-col items-center gap-3">
-                      <div className="flex items-center gap-3 px-6 py-2 rounded-full bg-blue-500/10 border border-blue-500/20">
-                        <div className="w-2 h-2 rounded-full bg-blue-500 animate-ping" />
-                        <span className="text-sm font-bold text-blue-400 uppercase tracking-[0.3em]">Active</span>
-                      </div>
-                      <p className="text-xs text-slate-500 font-medium italic">Continuous shop capture enabled...</p>
-                    </div>
-                  ) : (
-                    <span className="text-6xl font-black font-mono tracking-tighter tabular-nums text-red-500">
-                      {formatTime(duration)}
-                    </span>
-                  )}
-                </div>
-                
-                {/* Modern Visualizer */}
-                <div className="flex gap-1.5 h-16 items-end w-full max-w-md px-4">
-                  {[...Array(40)].map((_, i) => (
-                    <div 
-                      key={i} 
-                      className={`flex-1 rounded-full transition-all duration-300 ${isMonitoringMode ? 'bg-blue-500/60' : 'bg-red-500/60'}`} 
-                      style={{ height: `${20 + Math.random() * 80}%` }} 
-                    />
-                  ))}
-                </div>
-
-                {!isMonitoringMode && (
-                  <button 
-                    onClick={stopEverything} 
-                    className="mt-4 flex items-center gap-3 px-10 py-5 bg-white text-slate-950 font-black rounded-2xl hover:bg-slate-200 transition-all active:scale-95 shadow-xl shadow-white/5 uppercase tracking-widest text-sm"
-                  >
-                    <Square size={18} fill="currentColor" /> Stop Session
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-6">
-                <div className="relative">
-                  <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-500" size={20} />
-                  <input 
-                    type="text" 
-                    placeholder="Search archives by customer or transcript..." 
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full bg-slate-950/60 border border-slate-800 rounded-3xl p-6 pl-16 text-white font-medium outline-none focus:ring-2 focus:ring-blue-500/50 transition-all placeholder:text-slate-600" 
-                  />
-                </div>
-              </div>
-            )}
-          </div>
+    <div className="flex flex-col gap-6 h-[calc(100vh-140px)] animate-in fade-in slide-in-from-bottom-4 duration-500">
+      
+      {/* HEADER WITH SEARCH */}
+      <div className="bg-slate-900/40 backdrop-blur-md border border-slate-800 rounded-3xl p-8 shadow-2xl overflow-hidden relative">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/5 blur-[100px] -mr-32 -mt-32" />
+        <div className="flex justify-between items-center mb-6 relative z-10">
+          <h3 className="text-2xl font-bold text-white tracking-tight">Audio Logger</h3>
+          <button onClick={fetchLogs} className="p-3 text-slate-400 hover:text-white transition-all active:scale-95">
+            <RefreshCw size={20} className={isSyncing ? 'animate-spin' : ''} />
+          </button>
+        </div>
+        
+        {/* SEARCH BAR */}
+        <div className="relative z-10">
+          <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-500" size={20} />
+          <input 
+            type="text" 
+            placeholder="Search customer, service, or keyword..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-slate-950/60 border border-slate-800 rounded-2xl p-5 pl-16 text-white font-medium outline-none focus:ring-2 focus:ring-blue-500/50 transition-all placeholder:text-slate-600 shadow-inner"
+          />
         </div>
 
-        {/* REFINED LOG LIST */}
-        <div className="flex-1 bg-slate-900/20 rounded-[2.5rem] border border-slate-800/50 overflow-hidden flex flex-col">
-          <div className="p-6 border-b border-slate-800/50 bg-slate-900/40 flex justify-between items-center">
-            <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest">Recent Activity Logs</h4>
-            <span className="text-[10px] font-bold text-slate-400">{filteredLogs.length} Records</span>
-          </div>
-          <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
-            {filteredLogs.length > 0 ? filteredLogs.map((log) => (
-              <button 
-                key={log.id} 
-                onClick={() => setSelectedLog(log)} 
-                className={`w-full group text-left p-5 rounded-3xl border transition-all duration-300 ${
-                  selectedLog?.id === log.id 
-                    ? 'bg-blue-600/10 border-blue-500/50 shadow-lg' 
-                    : 'bg-slate-900/40 border-slate-800/40 hover:bg-slate-800/60 hover:border-slate-700'
-                }`}
-              >
-                <div className="flex justify-between items-start mb-3">
-                  <div className="flex items-center gap-4">
-                    <div className={`p-3 rounded-2xl border ${selectedLog?.id === log.id ? 'bg-blue-600 text-white border-blue-400' : 'bg-slate-950 text-slate-500 border-slate-800'}`}>
-                      {log.tags.includes('MONITOR') ? <Repeat size={20} /> : <Volume2 size={20} />}
-                    </div>
-                    <div>
-                      <h4 className={`font-bold transition-colors ${selectedLog?.id === log.id ? 'text-blue-400' : 'text-white'}`}>{log.customerName}</h4>
-                      <div className="flex items-center gap-3 text-[10px] font-bold uppercase tracking-widest text-slate-500 mt-0.5">
-                        <Clock size={10} /> {log.timestamp.split(',')[1]}
-                        <span>•</span>
-                        <span>{log.vehicle}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex flex-col items-end gap-1.5">
-                    <span className="text-[10px] font-black font-mono text-blue-400 bg-blue-500/5 px-2 py-1 rounded-lg border border-blue-500/10">{log.duration}</span>
-                    <div className="flex gap-1">
-                      {log.tags.map(tag => (
-                        <span key={tag} className="text-[8px] font-bold px-1.5 py-0.5 bg-slate-950 text-slate-500 border border-slate-800 rounded-md uppercase tracking-tighter">{tag}</span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                <p className="text-slate-400 text-xs leading-relaxed pl-16 line-clamp-2 font-medium">
-                  {log.transcriptPreview}
-                </p>
-              </button>
-            )) : (
-              <div className="h-full flex flex-col items-center justify-center text-slate-700 py-20 text-center">
-                <HardDrive size={64} className="mb-4 opacity-5" />
-                <p className="text-sm font-bold uppercase tracking-[0.3em] opacity-20">No Records Found</p>
-              </div>
-            )}
-          </div>
+        {/* DAY TABS (horizontal) */}
+        <div className="flex gap-2 mt-6 relative z-10">
+          {daysOfWeek.map(day => (
+            <button
+              key={day}
+              onClick={() => setSelectedDay(day)}
+              className={`flex-1 px-4 py-3 rounded-xl font-bold text-sm transition-all active:scale-95 ${
+                selectedDay === day 
+                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' 
+                  : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700 hover:text-white'
+              }`}
+            >
+              {day.substring(0, 3)}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* MODERN ANALYSIS WING */}
-      <div className="w-full lg:w-[420px] bg-slate-900/40 backdrop-blur-md border border-slate-800 rounded-[2.5rem] flex flex-col overflow-hidden shadow-2xl relative">
-        <div className="p-8 border-b border-slate-800/50 flex items-center gap-5">
-           <div className="p-3 bg-blue-500/10 rounded-2xl border border-blue-500/20 text-blue-400">
-             <Bot size={28} />
-           </div>
-           <div>
-             <h3 className="text-xl font-bold text-white tracking-tight">AI Intelligence</h3>
-             <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Natural Language Core</p>
-           </div>
+      {/* SEGMENTS LIST */}
+      <div className="flex-1 bg-slate-900/20 rounded-3xl border border-slate-800/50 overflow-hidden flex flex-col shadow-inner">
+        <div className="p-6 border-b border-slate-800/50 bg-slate-900/40 flex justify-between items-center">
+          <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest">
+            {searchQuery ? 'Search Results' : `${selectedDay}'s Activity`} ({filteredLogs.length} segments)
+          </h4>
         </div>
-
-        <div className="flex-1 p-8 overflow-y-auto space-y-6 custom-scrollbar">
-          {selectedLog ? (
-            <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
-              <div className="bg-slate-950/60 p-6 rounded-3xl border border-slate-800/50 shadow-inner">
-                <div className="flex items-center gap-2 mb-4">
-                  <Terminal size={14} className="text-blue-500" />
-                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Transcript Analysis</span>
+        
+        <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+          {filteredLogs.length > 0 ? filteredLogs.map((log) => (
+            <div 
+              key={log.id}
+              onClick={() => setSelectedLog(log)}
+              className={`w-full text-left p-6 rounded-2xl border transition-all duration-300 cursor-pointer ${
+                selectedLog?.id === log.id 
+                  ? 'bg-blue-600/10 border-blue-500/50 shadow-lg' 
+                  : 'bg-slate-900/40 border-slate-800/40 hover:bg-slate-800/60 hover:border-slate-700'
+              }`}
+            >
+              {/* Time range header */}
+              <div className="flex justify-between items-start mb-4">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-lg ${selectedLog?.id === log.id ? 'bg-blue-600 text-white' : 'bg-slate-950 text-blue-400 shadow-inner'}`}>
+                    <Clock size={16} />
+                  </div>
+                  <span className="font-bold text-white text-sm">{log.timestamp}</span>
                 </div>
-                <p className="text-slate-300 text-sm leading-relaxed font-medium">
-                  {selectedLog.transcriptPreview}
-                </p>
+                <div className="flex gap-1">
+                  {log.tags.map(tag => (
+                    <span key={tag} className="text-[8px] font-black px-2 py-1 bg-slate-950 text-slate-500 border border-slate-800 rounded uppercase tracking-tighter">
+                      {tag}
+                    </span>
+                  ))}
+                </div>
               </div>
               
-              {assistant.response && (
-                <div className="bg-blue-600 rounded-3xl p-6 shadow-xl shadow-blue-900/20 animate-in zoom-in-95 duration-300 relative">
-                  <div className="absolute top-0 right-0 p-4 opacity-10">
-                    <CheckCircle size={48} />
-                  </div>
-                  <div className="flex items-center gap-2 text-blue-100 text-[10px] font-black uppercase tracking-widest mb-3">
-                    <CheckCircle size={14} /> Model Output
-                  </div>
-                  <div className="text-white text-sm leading-relaxed font-bold tracking-tight">
-                    {assistant.response}
+              {/* Customer info - display as bullets */}
+              <div className="space-y-2 pl-4">
+                <div className="flex items-start gap-4">
+                  <span className="text-blue-500 mt-1 font-bold">•</span>
+                  <div className="flex-1">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                      <span className="font-bold text-white">{log.customerName}</span>
+                      {log.vehicle && (
+                        <>
+                          <span className="text-slate-600 font-bold hidden sm:inline">•</span>
+                          <span className="text-slate-400 text-xs font-medium">{log.vehicle}</span>
+                        </>
+                      )}
+                    </div>
+                    <p className="text-slate-400 text-sm mt-2 line-clamp-3 font-medium leading-relaxed italic opacity-80 group-hover:opacity-100">
+                      {log.transcriptPreview}
+                    </p>
                   </div>
                 </div>
-              )}
-            </div>
-          ) : (
-            <div className="h-full flex flex-col items-center justify-center text-center px-4">
-              <div className="w-20 h-20 bg-slate-950 rounded-full border border-slate-800 flex items-center justify-center mb-6">
-                <AlertTriangle size={32} className="text-slate-700" />
               </div>
-              <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.3em] leading-relaxed">
-                Select log entry <br /> to activate processor
-              </p>
+            </div>
+          )) : (
+            <div className="h-full flex flex-col items-center justify-center text-slate-700 py-20 text-center">
+              <HardDrive size={64} className="mb-4 opacity-5" />
+              <p className="text-xs font-black uppercase tracking-[0.3em] opacity-20">No matching segments</p>
             </div>
           )}
-        </div>
-
-        <div className="p-6 bg-slate-950/80 border-t border-slate-800/50">
-          <form onSubmit={handleAssistantAsk} className="flex gap-3">
-            <input 
-              type="text" 
-              value={assistant.query} 
-              onChange={(e) => setAssistant(prev => ({ ...prev, query: e.target.value }))} 
-              placeholder="Query log data..." 
-              className="flex-1 bg-slate-900/60 border border-slate-800 rounded-2xl px-5 py-4 text-sm text-white focus:ring-2 focus:ring-blue-500/50 outline-none transition-all placeholder:text-slate-700 font-medium" 
-            />
-            <button 
-              type="submit" 
-              disabled={assistant.isThinking || !selectedLog} 
-              className="bg-blue-600 w-14 h-14 rounded-2xl text-white flex items-center justify-center hover:bg-blue-500 disabled:opacity-30 transition-all shadow-lg shadow-blue-900/20"
-            >
-              {assistant.isThinking ? <div className="w-5 h-5 border-2 border-white border-t-transparent animate-spin rounded-full"></div> : <ChevronRight size={24} />}
-            </button>
-          </form>
         </div>
       </div>
     </div>
