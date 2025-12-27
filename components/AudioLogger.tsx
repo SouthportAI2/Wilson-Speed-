@@ -6,7 +6,7 @@ import { AudioLog } from '../types';
 
 const CONFIG_KEY = 'southport_config';
 const LOCAL_LOGS_KEY = 'southport_audio_cache_v3';
-const SPLIT_INTERVAL_SECONDS = 300; // 5 minutes
+const SPLIT_INTERVAL_SECONDS = 900; // 15 minutes
 
 const formatTime = (seconds: number): string => {
   const mins = Math.floor(seconds / 60);
