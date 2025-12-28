@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Search, RefreshCw, Clock, HardDrive } from 'lucide-react';
 import { getSupabaseClient } from '../services/supabaseClient';
 import { AudioLog } from '../types';
@@ -13,6 +13,29 @@ const formatTime = (seconds: number): string => {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 };
 
+const extractNameFromTranscript = (text: string): string | null => {
+  if (!text) return null;
+  
+  // Common patterns for name introduction
+  const patterns = [
+    /my name is ([A-Z][a-z]+ [A-Z][a-z]+)/i,
+    /this is ([A-Z][a-z]+ [A-Z][a-z]+)/i,
+    /I'm ([A-Z][a-z]+ [A-Z][a-z]+)/i,
+    /I am ([A-Z][a-z]+ [A-Z][a-z]+)/i,
+    /([A-Z][a-z]+ [A-Z][a-z]+) here/i,
+    /([A-Z][a-z]+ [A-Z][a-z]+) calling/i,
+  ];
+  
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match && match[1]) {
+      return match[1].trim();
+    }
+  }
+  
+  return null;
+};
+
 const AudioLogger: React.FC = () => {
   const [logs, setLogs] = useState<AudioLog[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -21,6 +44,14 @@ const AudioLogger: React.FC = () => {
   const [selectedDay, setSelectedDay] = useState<string>(
     new Date().toLocaleDateString('en-US', { weekday: 'long' })
   );
+
+  const [isRecording, setIsRecording] = useState(false);
+  const [duration, setDuration] = useState(0);
+
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const chunksRef = useRef<BlobPart[]>([]);
+  const durationTimerRef = useRef<number | null>(null);
 
   const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 
@@ -44,9 +75,18 @@ const AudioLogger: React.FC = () => {
             
             // Extract customer names for display
             const customerNames = customers.map((c: any) => c.name).filter(Boolean);
-            const displayName = customerNames.length > 0 
-              ? customerNames.join(', ') 
-              : 'SHOP SESSION';
+
+            let displayName = '';
+
+            if (customerNames.length > 0) {
+              // Use names from customers array (new logs)
+              displayName = customerNames.join(', ');
+            } else {
+              // Try to extract name from transcript (old logs)
+              const transcript = item.transcript || item.segment_summary || '';
+              const extractedName = extractNameFromTranscript(transcript);
+              displayName = extractedName || 'Unknown Customer';
+            }
             
             // Get first customer's vehicle if available
             const firstVehicle = customers[0]?.vehicle || 'SHOP FLOOR';
@@ -122,6 +162,86 @@ const AudioLogger: React.FC = () => {
     }
   };
 
+  const startRecording = useCallback(async () => {
+    try {
+      if (!streamRef.current) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        streamRef.current = stream;
+      }
+
+      const recorder = new MediaRecorder(streamRef.current!);
+      mediaRecorderRef.current = recorder;
+      chunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+
+      recorder.onstop = async () => {
+        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        await finalizeLog(blob, true, duration);
+        
+        // Auto-restart for next 15-min segment
+        if (isRecording) {
+          setTimeout(() => {
+            chunksRef.current = [];
+            setDuration(0);
+            mediaRecorderRef.current?.start();
+          }, 100);
+        }
+      };
+
+      recorder.start();
+      setIsRecording(true);
+      setDuration(0);
+
+      if (durationTimerRef.current) clearInterval(durationTimerRef.current);
+      durationTimerRef.current = window.setInterval(() => {
+        setDuration(prev => {
+          const next = prev + 1;
+          if (next >= SPLIT_INTERVAL_SECONDS) {
+            // Split at 15 minutes
+            if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+              mediaRecorderRef.current.stop();
+            }
+          }
+          return next;
+        });
+      }, 1000);
+    } catch (err) {
+      console.error('Microphone error:', err);
+      alert('Microphone access denied. Please enable microphone permissions.');
+    }
+  }, [duration, isRecording]);
+
+  const stopRecording = useCallback(() => {
+    if (durationTimerRef.current) clearInterval(durationTimerRef.current);
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+    }
+    setIsRecording(false);
+    setDuration(0);
+  }, []);
+
+  const handleToggleRecording = async () => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      await startRecording();
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (durationTimerRef.current) clearInterval(durationTimerRef.current);
+      stopRecording();
+    };
+  }, [stopRecording]);
+
   useEffect(() => {
     fetchLogs();
   }, [fetchLogs]);
@@ -169,9 +289,26 @@ const AudioLogger: React.FC = () => {
         <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/5 blur-[100px] -mr-32 -mt-32" />
         <div className="flex justify-between items-center mb-6 relative z-10">
           <h3 className="text-2xl font-bold text-white tracking-tight">Audio Logger</h3>
-          <button onClick={fetchLogs} className="p-3 text-slate-400 hover:text-white transition-all active:scale-95">
-            <RefreshCw size={20} className={isSyncing ? 'animate-spin' : ''} />
-          </button>
+          
+          <div className="flex items-center gap-3">
+            {/* NEW TOGGLE HERE */}
+            <div className="flex items-center gap-3 bg-slate-950/50 px-5 py-3 rounded-2xl border border-slate-800/50">
+              <span className={`text-xs font-bold uppercase tracking-widest transition-colors ${isRecording ? 'text-blue-400' : 'text-slate-500'}`}>
+                Start Conversation Summaries
+              </span>
+              <button 
+                onClick={handleToggleRecording}
+                className={`relative w-12 h-6 transition-colors rounded-full focus:outline-none ${isRecording ? 'bg-blue-600' : 'bg-slate-700'}`}
+              >
+                <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${isRecording ? 'translate-x-6' : 'translate-x-0'}`} />
+              </button>
+            </div>
+            
+            {/* REFRESH BUTTON */}
+            <button onClick={fetchLogs} className="p-3 text-slate-400 hover:text-white transition-all active:scale-95">
+              <RefreshCw size={20} className={isSyncing ? 'animate-spin' : ''} />
+            </button>
+          </div>
         </div>
         
         {/* SEARCH BAR */}
