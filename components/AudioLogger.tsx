@@ -291,10 +291,10 @@ const AudioLogger: React.FC = () => {
           <h3 className="text-2xl font-bold text-white tracking-tight">Audio Logger</h3>
           
           <div className="flex items-center gap-3">
-            {/* NEW TOGGLE HERE */}
+            {/* TOGGLE */}
             <div className="flex items-center gap-3 bg-slate-950/50 px-5 py-3 rounded-2xl border border-slate-800/50">
               <span className={`text-xs font-bold uppercase tracking-widest transition-colors ${isRecording ? 'text-blue-400' : 'text-slate-500'}`}>
-                Start Conversation Summaries
+                AI Monitoring
               </span>
               <button 
                 onClick={handleToggleRecording}
