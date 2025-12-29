@@ -1,11 +1,10 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { Sparkles, Facebook, Instagram, Image as ImageIcon, Check, Share2, Upload, X, Loader2, Send, AlertCircle, Zap, Lock, ShieldCheck } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 import { InfrastructureConfig } from '../types';
 
 const SocialPoster: React.FC = () => {
-  const [image, setImage] = useState<string | null>(null);
+  const [images, setImages] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [content, setContent] = useState('');
   const [postStatus, setPostStatus] = useState<'idle' | 'posting' | 'success' | 'error'>('idle');
@@ -18,24 +17,45 @@ const SocialPoster: React.FC = () => {
   }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
+    const files = e.target.files;
+    if (!files) return;
+    
+    const newImages: string[] = [];
+    const fileArray = Array.from(files);
+    
+    // Limit to 8 images total
+    const remainingSlots = 8 - images.length;
+    const filesToProcess = fileArray.slice(0, remainingSlots);
+    
+    let processed = 0;
+    if (filesToProcess.length === 0) return;
+
+    filesToProcess.forEach((file) => {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setImage(reader.result as string);
-        setContent('');
-        setPostStatus('idle');
+        newImages.push(reader.result as string);
+        processed++;
+        if (processed === filesToProcess.length) {
+          setImages(prev => [...prev, ...newImages]);
+          setContent('');
+          setPostStatus('idle');
+        }
       };
       reader.readAsDataURL(file);
-    }
+    });
+  };
+
+  const removeImage = (index: number) => {
+    setImages(prev => prev.filter((_, i) => i !== index));
+    setContent('');
   };
 
   const handleGenerate = async () => {
-    if (!image) return;
+    if (images.length === 0) return;
     setLoading(true);
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const base64Data = image.split(',')[1];
+      const base64Data = images[0].split(',')[1];
       
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
@@ -48,7 +68,7 @@ const SocialPoster: React.FC = () => {
               },
             },
             {
-              text: "You are a professional social media manager for Eric Wilson's business. Analyze this photo and generate a high-engagement headline and short caption suitable for social media. Use punchy, high-end language. Return ONLY the final text.",
+              text: `You are a professional social media manager for Wilson Speed, an auto repair shop in Southport, NC run by Eric Wilson. Analyze this photo${images.length > 1 ? ` (1 of ${images.length} images)` : ''} and create a compelling, professional social media caption. Be authentic, highlight quality workmanship, and keep it concise (2-3 sentences max). Use a confident, professional tone. Return ONLY the caption text.`,
             },
           ],
         },
@@ -76,7 +96,7 @@ const SocialPoster: React.FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          image: image,
+          images: images,
           caption: content,
           timestamp: new Date().toISOString()
         })
@@ -94,7 +114,7 @@ const SocialPoster: React.FC = () => {
   };
 
   const clear = () => {
-    setImage(null);
+    setImages([]);
     setContent('');
     setPostStatus('idle');
   };
@@ -133,40 +153,71 @@ const SocialPoster: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="space-y-4">
-              <div 
-                onClick={() => !image && fileInputRef.current?.click()}
-                className={`relative aspect-square rounded-[2rem] border-2 border-dashed transition-all flex flex-col items-center justify-center cursor-pointer overflow-hidden ${
-                  image ? 'border-indigo-500/50 bg-slate-950/40' : 'border-slate-800 hover:border-indigo-500/50 bg-slate-900/20 hover:bg-slate-900/40'
-                }`}
-              >
-                {image ? (
-                  <>
-                    <img src={image} alt="Preview" className="w-full h-full object-cover" />
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); clear(); }}
-                      className="absolute top-4 right-4 p-2 bg-slate-950/80 rounded-full text-white hover:bg-red-500 transition-colors border border-slate-800"
-                    >
-                      <X size={16} />
-                    </button>
-                  </>
-                ) : (
-                  <div className="flex flex-col items-center gap-4 p-8 text-center">
-                    <div className="p-5 bg-indigo-500/10 rounded-full text-indigo-400 mb-2">
-                      <Upload size={32} />
-                    </div>
-                    <div>
-                      <p className="text-white font-bold text-sm mb-1 uppercase tracking-widest">Asset Loader</p>
-                      <p className="text-slate-500 text-xs font-medium italic">Inject visual data node</p>
-                    </div>
+              {/* Image Grid */}
+              <div className="grid grid-cols-2 gap-3">
+                {Array.from({ length: 8 }).map((_, index) => (
+                  <div
+                    key={index}
+                    onClick={() => images.length === index && fileInputRef.current?.click()}
+                    className={`relative aspect-square rounded-2xl border-2 transition-all flex items-center justify-center overflow-hidden ${
+                      images[index]
+                        ? 'border-indigo-500/50 bg-slate-950/40'
+                        : index === images.length
+                        ? 'border-dashed border-slate-700 hover:border-indigo-500/50 bg-slate-900/20 hover:bg-slate-900/40 cursor-pointer active:scale-95'
+                        : 'border-slate-800/30 bg-slate-950/20 opacity-30'
+                    }`}
+                  >
+                    {images[index] ? (
+                      <>
+                        <img src={images[index]} alt={`Upload ${index + 1}`} className="w-full h-full object-cover" />
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeImage(index);
+                          }}
+                          className="absolute top-2 right-2 p-1.5 bg-slate-950/90 rounded-full text-white hover:bg-red-500 transition-colors border border-slate-700"
+                        >
+                          <X size={14} />
+                        </button>
+                      </>
+                    ) : index === images.length ? (
+                      <div className="flex flex-col items-center gap-2 p-4 text-center">
+                        <div className="p-3 bg-indigo-500/10 rounded-full text-indigo-400">
+                          <Upload size={20} />
+                        </div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                          {images.length === 0 ? 'Tap to Upload' : `Add ${index + 1}`}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="text-slate-800 text-xs font-bold">{index + 1}</div>
+                    )}
                   </div>
-                )}
-                <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
+                ))}
               </div>
-              
-              {!content && (
-                <button 
+
+              {/* Upload Instructions */}
+              {images.length === 0 && (
+                <div className="p-4 bg-indigo-500/5 border border-indigo-500/20 rounded-xl">
+                  <p className="text-xs text-indigo-400 font-medium text-center">
+                    📱 Tap to upload up to 8 photos from your phone or computer
+                  </p>
+                </div>
+              )}
+
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                accept="image/*"
+                multiple
+                className="hidden"
+              />
+
+              {!content && images.length > 0 && (
+                <button
                   onClick={handleGenerate}
-                  disabled={!image || loading}
+                  disabled={loading}
                   className="w-full flex items-center justify-center gap-3 px-8 py-5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-30 text-white font-black rounded-2xl transition-all active:scale-95 shadow-xl shadow-indigo-900/20 uppercase tracking-widest text-xs"
                 >
                   {loading ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
@@ -191,6 +242,12 @@ const SocialPoster: React.FC = () => {
                   </div>
                 ) : content ? (
                   <div className="space-y-4">
+                    {images.length > 1 && (
+                      <div className="flex items-center gap-2 px-3 py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-lg">
+                        <ImageIcon size={14} className="text-indigo-400" />
+                        <span className="text-xs font-bold text-indigo-400">{images.length} photos selected</span>
+                      </div>
+                    )}
                     <textarea 
                       value={content}
                       onChange={(e) => setContent(e.target.value)}
