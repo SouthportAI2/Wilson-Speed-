@@ -3,12 +3,15 @@ import { Sparkles, Facebook, Instagram, Image as ImageIcon, Check, Share2, Uploa
 import { GoogleGenAI } from "@google/genai";
 import { InfrastructureConfig } from '../types';
 
+// Extend local config type to include geminiApiKey
+type SocialConfig = InfrastructureConfig & { geminiApiKey?: string };
+
 const SocialPoster: React.FC = () => {
   const [images, setImages] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [content, setContent] = useState('');
   const [postStatus, setPostStatus] = useState<'idle' | 'posting' | 'success' | 'error'>('idle');
-  const [config, setConfig] = useState<InfrastructureConfig | null>(null);
+  const [config, setConfig] = useState<SocialConfig | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -51,10 +54,13 @@ const SocialPoster: React.FC = () => {
   };
 
   const handleGenerate = async () => {
-    if (images.length === 0) return;
+    if (images.length === 0 || !config?.geminiApiKey) {
+      alert("Please configure Gemini API Key in Settings");
+      return;
+    }
     setLoading(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const ai = new GoogleGenAI({ apiKey: config.geminiApiKey });
       const base64Data = images[0].split(',')[1];
       
       const response = await ai.models.generateContent({
