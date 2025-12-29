@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
   Save, 
@@ -15,8 +14,11 @@ import {
 } from 'lucide-react';
 import { InfrastructureConfig } from '../types';
 
+// Extend InfrastructureConfig locally to include geminiApiKey
+type SettingsConfig = InfrastructureConfig & { geminiApiKey: string };
+
 const Settings: React.FC = () => {
-  const [config, setConfig] = useState<InfrastructureConfig>({
+  const [config, setConfig] = useState<SettingsConfig>({
     n8nWebhookEmail: '',
     n8nWebhookAudio: '',
     n8nWebhookSocial: '',
@@ -26,6 +28,7 @@ const Settings: React.FC = () => {
     businessName: '',
     businessPhone: '',
     googleMapsLink: '',
+    geminiApiKey: '',
   });
   const [saveStatus, setSaveStatus] = useState<'IDLE' | 'SAVING' | 'SUCCESS'>('IDLE');
 
@@ -124,6 +127,21 @@ const Settings: React.FC = () => {
                   className="w-full bg-slate-950/50 border border-slate-800 rounded-2xl p-4 text-sm text-white focus:ring-2 focus:ring-yellow-500/50 outline-none transition-all"
                 />
                 <p className="text-[9px] text-slate-600 font-medium px-1 italic">Used by the Review Booster node to generate one-tap review requests.</p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2">
+                  <Zap size={12} /> Gemini API Key
+                </label>
+                <input 
+                  type="password" 
+                  name="geminiApiKey"
+                  value={config.geminiApiKey}
+                  onChange={handleChange}
+                  placeholder="AIza..."
+                  className="w-full bg-slate-950/50 border border-slate-800 rounded-2xl p-4 text-sm text-white focus:ring-2 focus:ring-purple-500/50 outline-none transition-all"
+                />
+                <p className="text-[9px] text-slate-600 font-medium px-1 italic">Used by Social Poster AI to generate captions. Get your key at aistudio.google.com</p>
               </div>
             </div>
           </div>
