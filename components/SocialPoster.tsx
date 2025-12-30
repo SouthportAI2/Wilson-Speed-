@@ -64,7 +64,7 @@ const SocialPoster: React.FC = () => {
       const base64Data = images[0].split(',')[1];
       
       const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-2.5-flash',
         contents: {
           parts: [
             {
