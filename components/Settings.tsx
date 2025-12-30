@@ -33,15 +33,42 @@ const Settings: React.FC = () => {
   const [saveStatus, setSaveStatus] = useState<'IDLE' | 'SAVING' | 'SUCCESS'>('IDLE');
 
   useEffect(() => {
+    // Load from localStorage first
     const saved = localStorage.getItem('southport_config');
+    let loadedConfig: SettingsConfig = {
+      n8nWebhookEmail: '',
+      n8nWebhookAudio: '',
+      n8nWebhookSocial: '',
+      n8nWebhookReview: '',
+      supabaseUrl: '',
+      supabaseKey: '',
+      businessName: '',
+      businessPhone: '',
+      googleMapsLink: '',
+      geminiApiKey: '',
+    };
+
     if (saved) {
       try {
-        const parsed = JSON.parse(saved);
-        setConfig(prev => ({ ...prev, ...parsed }));
+        loadedConfig = { ...loadedConfig, ...JSON.parse(saved) };
       } catch (e) {
         console.error("Failed to parse config", e);
       }
     }
+
+    // Use environment variables as defaults if localStorage is empty
+    setConfig({
+      n8nWebhookEmail: loadedConfig.n8nWebhookEmail || (import.meta as any).env.VITE_N8N_WEBHOOK_EMAIL || '',
+      n8nWebhookAudio: loadedConfig.n8nWebhookAudio || (import.meta as any).env.VITE_N8N_WEBHOOK_AUDIO || '',
+      n8nWebhookSocial: loadedConfig.n8nWebhookSocial || (import.meta as any).env.VITE_N8N_WEBHOOK_SOCIAL || '',
+      n8nWebhookReview: loadedConfig.n8nWebhookReview || (import.meta as any).env.VITE_N8N_WEBHOOK_REVIEW || '',
+      supabaseUrl: loadedConfig.supabaseUrl || (import.meta as any).env.VITE_SUPABASE_URL || '',
+      supabaseKey: loadedConfig.supabaseKey || (import.meta as any).env.VITE_SUPABASE_KEY || '',
+      businessName: loadedConfig.businessName || (import.meta as any).env.VITE_BUSINESS_NAME || '',
+      businessPhone: loadedConfig.businessPhone || (import.meta as any).env.VITE_BUSINESS_PHONE || '',
+      googleMapsLink: loadedConfig.googleMapsLink || (import.meta as any).env.VITE_GOOGLE_MAPS_LINK || '',
+      geminiApiKey: loadedConfig.geminiApiKey || (import.meta as any).env.VITE_GEMINI_API_KEY || '',
+    });
   }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
