@@ -53,7 +53,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/5 border border-blue-500/20 text-blue-400 text-[10px] font-bold uppercase tracking-widest mb-6">
               <Shield size={12} /> System Operational
             </div>
-            <h1 className="text-4xl md:text-6xl font-bold text-white tracking-tight leading-[1.1]">
+            <h1 className="text-3xl md:text-5xl font-bold text-white tracking-tight leading-[1.1]">
               Welcome to Wilson Speed's <br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-600">AI infrastructure.</span>
             </h1>
