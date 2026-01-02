@@ -1,26 +1,31 @@
-
 import { createClient } from '@supabase/supabase-js';
 
-export const getSupabaseClient = () => {
-  const storedConfig = localStorage.getItem('southport_config');
-  if (!storedConfig) return null;
+let supabase: any = null;
 
-  try {
-    const config = JSON.parse(storedConfig);
-    const supabaseUrl = config.supabaseUrl;
-    const supabaseKey = config.supabaseKey;
-
-    if (!supabaseUrl || !supabaseKey) return null;
-
-    // Basic URL validation to prevent SDK crash
-    if (!supabaseUrl.startsWith('http')) {
-      console.warn("Invalid Supabase URL format in config.");
-      return null;
+// Renamed from getSupabase to getSupabaseClient to fix import errors in AudioLogger and DiagnosticsPanel
+export function getSupabaseClient() {
+  if (!supabase) {
+    const config = localStorage.getItem('southport_config');
+    if (config) {
+      const { supabaseUrl, supabaseKey } = JSON.parse(config);
+      if (supabaseUrl && supabaseKey) {
+        supabase = createClient(supabaseUrl, supabaseKey);
+      }
     }
-
-    return createClient(supabaseUrl, supabaseKey);
-  } catch (e) {
-    console.error("Supabase Initialization Protocol Failure:", e);
-    return null;
   }
-};
+  return supabase;
+}
+
+export async function fetchEmailSummaries() {
+  const client = getSupabaseClient();
+  if (!client) throw new Error('Supabase not configured');
+  
+  const { data, error } = await client
+    .from('email_summaries')
+    .select('*')
+    .order('received_at', { ascending: false })
+    .limit(20);
+  
+  if (error) throw error;
+  return data || [];
+}
