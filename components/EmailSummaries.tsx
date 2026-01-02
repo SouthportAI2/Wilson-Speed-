@@ -1,8 +1,8 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Mail, RefreshCw, AlertCircle, Package, UserCheck, Clock, ShieldCheck, Zap, Activity } from 'lucide-react';
 import { generateEmailSummaries } from '../services/gemini';
 import { EmailSummary, InfrastructureConfig } from '../types';
+import { fetchEmailSummaries as fetchFromSupabase } from '../services/supabaseClient';
 
 const AUTO_REFRESH_INTERVAL = 20 * 60 * 1000; // 20 minutes
 const STATS_STORAGE_KEY = 'southport_daily_stats';
@@ -83,36 +83,30 @@ const EmailSummaries: React.FC = () => {
     setError(null);
     
     try {
-      console.log(`[INFRA] Triggering ${isAuto ? 'automated' : 'manual'} handshake...`);
+      console.log(`[INFRA] Fetching email summaries from Supabase...`);
       
-      if (config?.n8nWebhookEmail) {
-        const response = await fetch(config.n8nWebhookEmail, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            action: 'FETCH_SUMMARIES', 
-            trigger: isAuto ? 'SCHEDULED_POLLING' : 'MANUAL_SYNC',
-            timestamp: new Date().toISOString() 
-          })
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          if (Array.isArray(data)) {
-            setEmails(data);
-            setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-            setLoading(false);
-            return;
-          }
-        }
-      }
+      const dbEmails = await fetchFromSupabase();
+      
+      const transformed = dbEmails.map((email: any) => ({
+        id: email.id,
+        sender: email.sender_name || email.sender_email,
+        subject: email.subject,
+        summary: email.summary,
+        timestamp: new Date(email.received_at).toLocaleString('en-US', { 
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit', 
+          minute: '2-digit'
+        }),
+        category: email.summary.toLowerCase().includes('urgent') ? 'URGENT' : 
+                  email.summary.toLowerCase().includes('part') ? 'PARTS' : 'CUSTOMER'
+      }));
 
-      const results = await generateEmailSummaries();
-      setEmails(results);
+      setEmails(transformed);
       setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
     } catch (err) {
       console.error("Sync failed:", err);
-      if (!isAuto) setError("Infrastructure handshake failed. Check n8n node connectivity.");
+      if (!isAuto) setError("Infrastructure handshake failed. Check Supabase connectivity.");
     } finally {
       setLoading(false);
     }
