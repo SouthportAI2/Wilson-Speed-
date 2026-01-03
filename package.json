@@ -13,7 +13,9 @@
     "lucide-react": "^0.344.0",
     "react": "18.2.0",
     "react-dom": "18.2.0",
-    "@supabase/supabase-js": "^2.39.0"
+    "@supabase/supabase-js": "^2.39.0",
+    "imap": "^0.8.19",
+    "mailparser": "^3.6.5"
   },
   "devDependencies": {
     "@types/react": "^18.2.64",
