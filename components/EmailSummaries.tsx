@@ -18,7 +18,7 @@ const EmailSummaries: React.FC = () => {
   const [emails, setEmails] = useState<EmailSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string>('Not yet updated');
-  const [config, setConfig] = useState<InfrastructureConfig | null>(null);
+  const [config, setConfig] = useState<InfrastructureConfig | any>(null);
   const [error, setError] = useState<string | null>(null);
   
   // Daily Stats State
@@ -83,11 +83,38 @@ const EmailSummaries: React.FC = () => {
     setError(null);
     
     try {
-      console.log(`[INFRA] Fetching email summaries from Supabase...`);
+      console.log(`[INFRA] Fetching emails from Yahoo...`);
+      
+      const yahooEmail = config?.yahooEmail || '';
+      const yahooAppPassword = config?.yahooAppPassword || '';
+      const n8nWebhookUrl = config?.n8nWebhookEmail || '';
+      
+      if (!yahooEmail || !yahooAppPassword || !n8nWebhookUrl) {
+        throw new Error('Missing Yahoo or n8n configuration. Check Settings.');
+      }
+      
+      const response = await fetch('/api/fetch-emails', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          yahooEmail,
+          yahooAppPassword,
+          n8nWebhookUrl
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch emails from server');
+      }
+      
+      const result = await response.json();
+      console.log(`Processed ${result.processed} emails`);
+      
+      await new Promise(resolve => setTimeout(resolve, 2000));
       
       const dbEmails = await fetchFromSupabase();
       
-      const transformed = dbEmails.map((email: any) => ({
+      const transformed = dbEmails.map((email) => ({
         id: email.id,
         sender: email.sender_name || email.sender_email,
         subject: email.subject,
@@ -101,12 +128,12 @@ const EmailSummaries: React.FC = () => {
         category: email.summary.toLowerCase().includes('urgent') ? 'URGENT' : 
                   email.summary.toLowerCase().includes('part') ? 'PARTS' : 'CUSTOMER'
       }));
-
+      
       setEmails(transformed);
       setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
     } catch (err) {
       console.error("Sync failed:", err);
-      if (!isAuto) setError("Infrastructure handshake failed. Check Supabase connectivity.");
+      if (!isAuto) setError(err instanceof Error ? err.message : "Infrastructure handshake failed. Check connectivity.");
     } finally {
       setLoading(false);
     }
