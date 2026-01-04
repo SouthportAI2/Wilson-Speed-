@@ -14,11 +14,8 @@ import {
 } from 'lucide-react';
 import { InfrastructureConfig } from '../types';
 
-// Extend InfrastructureConfig locally to include geminiApiKey
-type SettingsConfig = InfrastructureConfig & { geminiApiKey: string };
-
 const Settings: React.FC = () => {
-  const [config, setConfig] = useState<SettingsConfig>({
+  const [config, setConfig] = useState<InfrastructureConfig | any>({
     n8nWebhookEmail: '',
     n8nWebhookAudio: '',
     n8nWebhookSocial: '',
@@ -28,14 +25,15 @@ const Settings: React.FC = () => {
     businessName: '',
     businessPhone: '',
     googleMapsLink: '',
-    geminiApiKey: '',
+    yahooEmail: '',
+    yahooAppPassword: '',
   });
   const [saveStatus, setSaveStatus] = useState<'IDLE' | 'SAVING' | 'SUCCESS'>('IDLE');
 
   useEffect(() => {
     // Load from localStorage first
     const saved = localStorage.getItem('southport_config');
-    let loadedConfig: SettingsConfig = {
+    let loadedConfig: any = {
       n8nWebhookEmail: '',
       n8nWebhookAudio: '',
       n8nWebhookSocial: '',
@@ -45,7 +43,8 @@ const Settings: React.FC = () => {
       businessName: '',
       businessPhone: '',
       googleMapsLink: '',
-      geminiApiKey: '',
+      yahooEmail: '',
+      yahooAppPassword: '',
     };
 
     if (saved) {
@@ -67,7 +66,8 @@ const Settings: React.FC = () => {
       businessName: loadedConfig.businessName || (import.meta as any).env.VITE_BUSINESS_NAME || '',
       businessPhone: loadedConfig.businessPhone || (import.meta as any).env.VITE_BUSINESS_PHONE || '',
       googleMapsLink: loadedConfig.googleMapsLink || (import.meta as any).env.VITE_GOOGLE_MAPS_LINK || '',
-      geminiApiKey: loadedConfig.geminiApiKey || (import.meta as any).env.VITE_GEMINI_API_KEY || '',
+      yahooEmail: loadedConfig.yahooEmail || (import.meta as any).env.VITE_YAHOO_EMAIL || '',
+      yahooAppPassword: loadedConfig.yahooAppPassword || (import.meta as any).env.VITE_YAHOO_APP_PASSWORD || '',
     });
   }, []);
 
@@ -158,17 +158,31 @@ const Settings: React.FC = () => {
 
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2">
-                  <Zap size={12} /> Gemini API Key
+                  <Building2 size={12} /> Yahoo Email Address
+                </label>
+                <input 
+                  type="email" 
+                  name="yahooEmail"
+                  value={config.yahooEmail}
+                  onChange={handleChange}
+                  placeholder="throwaway7727@yahoo.com"
+                  className="w-full bg-slate-950/50 border border-slate-800 rounded-2xl p-4 text-sm text-white focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2">
+                  <ShieldCheck size={12} /> Yahoo App Password
                 </label>
                 <input 
                   type="password" 
-                  name="geminiApiKey"
-                  value={config.geminiApiKey}
+                  name="yahooAppPassword"
+                  value={config.yahooAppPassword}
                   onChange={handleChange}
-                  placeholder="AIza..."
+                  placeholder="16-character app password"
                   className="w-full bg-slate-950/50 border border-slate-800 rounded-2xl p-4 text-sm text-white focus:ring-2 focus:ring-purple-500/50 outline-none transition-all"
                 />
-                <p className="text-[9px] text-slate-600 font-medium px-1 italic">Used by Social Poster AI to generate captions. Get your key at aistudio.google.com</p>
+                <p className="text-[9px] text-slate-600 font-medium px-1 italic">Generate at login.yahoo.com/account/security</p>
               </div>
             </div>
           </div>
