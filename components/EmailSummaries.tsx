@@ -83,34 +83,7 @@ const EmailSummaries: React.FC = () => {
     setError(null);
     
     try {
-      console.log(`[INFRA] Fetching emails from Yahoo...`);
-      
-      const yahooEmail = config?.yahooEmail || '';
-      const yahooAppPassword = config?.yahooAppPassword || '';
-      const n8nWebhookUrl = config?.n8nWebhookEmail || '';
-      
-      if (!yahooEmail || !yahooAppPassword || !n8nWebhookUrl) {
-        throw new Error('Missing Yahoo or n8n configuration. Check Settings.');
-      }
-      
-      const response = await fetch('/api/fetch-emails', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          yahooEmail,
-          yahooAppPassword,
-          n8nWebhookUrl
-        })
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch emails from server');
-      }
-      
-      const result = await response.json();
-      console.log(`Processed ${result.processed} emails`);
-      
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      console.log(`[INFRA] Fetching email summaries from Supabase...`);
       
       const dbEmails = await fetchFromSupabase();
       
@@ -132,8 +105,8 @@ const EmailSummaries: React.FC = () => {
       setEmails(transformed);
       setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
     } catch (err) {
-      console.error("Sync failed:", err);
-      if (!isAuto) setError(err instanceof Error ? err.message : "Infrastructure handshake failed. Check connectivity.");
+      console.error("Failed to fetch email summaries:", err);
+      if (!isAuto) setError("Could not load email summaries. Check Supabase configuration in Settings.");
     } finally {
       setLoading(false);
     }
