@@ -9,7 +9,6 @@ const EmailSummaries: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string>('Not yet updated');
   const [error, setError] = useState<string | null>(null);
-  const [selectedTab, setSelectedTab] = useState<string>('TODAY');
 
   const fetchEmails = useCallback(async (isAuto = false) => {
     if (!isAuto) setLoading(true);
@@ -52,7 +51,6 @@ const EmailSummaries: React.FC = () => {
           order_number: email.order_number,
           urgency_level: email.urgency_level || 'medium',
           request_type: email.request_type || 'general',
-          received_at: new Date(email.received_at),
           timestamp: new Date(email.received_at).toLocaleString('en-US', { 
             month: 'short',
             day: 'numeric',
@@ -62,15 +60,7 @@ const EmailSummaries: React.FC = () => {
         };
       });
       
-      // Sort by priority first (high -> medium -> low), then by time (newest first)
-      const priorityOrder = { high: 0, medium: 1, low: 2 };
-      const sorted = transformed.sort((a, b) => {
-        const priorityDiff = priorityOrder[a.urgency_level] - priorityOrder[b.urgency_level];
-        if (priorityDiff !== 0) return priorityDiff;
-        return b.received_at.getTime() - a.received_at.getTime();
-      });
-      
-      setEmails(sorted);
+      setEmails(transformed);
       setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
     } catch (err) {
       console.error("Failed to fetch email summaries:", err);
@@ -88,43 +78,7 @@ const EmailSummaries: React.FC = () => {
     return () => clearInterval(intervalId);
   }, [fetchEmails]);
 
-  const getDateGroup = (date: Date) => {
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-    const weekAgo = new Date(today);
-    weekAgo.setDate(weekAgo.getDate() - 7);
-    
-    const emailDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    
-    if (emailDate.getTime() === today.getTime()) return 'TODAY';
-    if (emailDate.getTime() === yesterday.getTime()) return 'YESTERDAY';
-    if (emailDate >= weekAgo) return 'LAST WEEK';
-    return 'OLDER';
-  };
-
-  const filteredEmails = emails.filter(email => getDateGroup(email.received_at) === selectedTab);
-
-  const getCardBorderColor = (level: string) => {
-    switch (level) {
-      case 'high': return 'border-red-500/50 bg-slate-900/40';
-      case 'medium': return 'border-yellow-500/50 bg-slate-900/40';
-      case 'low': return 'border-slate-600 bg-slate-900/40';
-      default: return 'border-slate-700 bg-slate-900/40';
-    }
-  };
-
-  const getTitleColor = (level: string) => {
-    switch (level) {
-      case 'high': return 'text-red-400';
-      case 'medium': return 'text-yellow-400';
-      case 'low': return 'text-slate-400';
-      default: return 'text-white';
-    }
-  };
-
-  const getUrgencyBadgeColor = (level: string) => {
+  const getUrgencyColor = (level: string) => {
     switch (level) {
       case 'high': return 'bg-red-500/10 border-red-500/30 text-red-400';
       case 'medium': return 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400';
@@ -143,28 +97,26 @@ const EmailSummaries: React.FC = () => {
     }
   };
 
-  const tabs = ['TODAY', 'YESTERDAY', 'LAST WEEK', 'OLDER'];
-
   return (
-    <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 text-left">
-      <div className="bg-slate-900/40 backdrop-blur-md border border-slate-800 rounded-3xl p-6 shadow-2xl relative overflow-hidden">
+    <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 text-left">
+      <div className="bg-slate-900/40 backdrop-blur-md border border-slate-800 rounded-[2.5rem] p-8 md:p-10 shadow-2xl relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/5 blur-[100px] -mr-32 -mt-32" />
         
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8 border-b border-slate-800 pb-6">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-blue-600 rounded-xl text-white shadow-xl shadow-blue-900/20">
-              <Zap size={24} />
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12 border-b border-slate-800 pb-10">
+          <div className="flex items-center gap-5">
+            <div className="p-4 bg-blue-600 rounded-2xl text-white shadow-xl shadow-blue-900/20">
+              <Zap size={28} />
             </div>
             <div>
-              <h3 className="text-xl font-bold text-white tracking-tight">Email Summarizer</h3>
+              <h3 className="text-2xl font-bold text-white tracking-tight">Email Summarizer</h3>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1">
                 <p className="text-slate-400 text-xs flex items-center gap-2 font-medium">
-                  <Clock size={12} className="text-blue-500" /> 
+                  <Clock size={14} className="text-blue-500" /> 
                   Last updated: <span className="text-slate-200">{lastUpdated}</span>
                 </p>
                 <div className="flex items-center gap-2 px-2 py-0.5 bg-blue-500/5 border border-blue-500/10 rounded-full">
                   <Activity size={10} className="text-blue-500 animate-pulse" />
-                  <span className="text-[10px] font-black uppercase tracking-widest text-blue-400/70">Auto-Sync (20m)</span>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-blue-400/70">Auto-Sync Active (20m)</span>
                 </div>
               </div>
             </div>
@@ -173,77 +125,55 @@ const EmailSummaries: React.FC = () => {
           <button 
             onClick={() => fetchEmails(false)}
             disabled={loading}
-            className="group flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-all active:scale-95 shadow-xl shadow-blue-900/20 disabled:opacity-50 font-bold text-xs"
+            className="group flex items-center gap-3 px-8 py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl transition-all active:scale-95 shadow-xl shadow-blue-900/20 disabled:opacity-50 font-black uppercase tracking-widest text-xs"
           >
-            <RefreshCw size={16} className={loading ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'} />
+            <RefreshCw size={18} className={loading ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'} />
             {loading ? 'Refreshing...' : 'Refresh'}
           </button>
         </div>
 
-        {/* TABS */}
-        <div className="flex gap-2 mb-6">
-          {tabs.map(tab => (
-            <button
-              key={tab}
-              onClick={() => setSelectedTab(tab)}
-              className={`flex-1 px-4 py-2.5 rounded-xl font-bold text-sm transition-all ${
-                selectedTab === tab 
-                  ? 'bg-blue-600 text-white shadow-lg' 
-                  : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700 hover:text-white'
-              }`}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
-
         {error && (
-          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-4 text-red-400">
-            <AlertCircle size={18} />
-            <p className="text-xs font-bold">{error}</p>
+          <div className="mb-8 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center gap-4 text-red-400">
+            <AlertCircle size={20} />
+            <p className="text-xs font-bold uppercase tracking-wide">{error}</p>
           </div>
         )}
 
-        <div className="space-y-3">
+        <div className="space-y-4">
           {loading && emails.length === 0 ? (
-             <div className="flex flex-col items-center justify-center py-20 text-slate-500 gap-4">
+             <div className="flex flex-col items-center justify-center py-24 text-slate-500 gap-4">
                 <div className="relative w-12 h-12">
                   <div className="absolute inset-0 border-4 border-blue-500/20 rounded-full" />
                   <div className="absolute inset-0 border-4 border-blue-500 rounded-full border-t-transparent animate-spin" />
                 </div>
-                <p className="text-[10px] font-black uppercase tracking-[0.3em] animate-pulse">Loading...</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] animate-pulse">Establishing Secure Handshake...</p>
              </div>
-          ) : filteredEmails.length > 0 ? (
-            filteredEmails.map((email) => (
+          ) : emails.length > 0 ? (
+            emails.map((email) => (
               <div 
                 key={email.id} 
-                className={`group relative rounded-2xl p-4 border transition-all duration-300 hover:shadow-xl cursor-pointer ${getCardBorderColor(email.urgency_level)}`}
+                className={`group relative rounded-3xl p-6 border transition-all duration-300 hover:shadow-2xl cursor-pointer ${getUrgencyColor(email.urgency_level)}`}
               >
-                <div className="flex flex-wrap items-center gap-2 mb-3">
-                  <span className={`text-[9px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider border ${getUrgencyBadgeColor(email.urgency_level)}`}>
+                <div className="flex flex-wrap items-center gap-3 mb-4">
+                  <span className={`text-[9px] font-black px-3 py-1.5 rounded-lg uppercase tracking-widest border ${getUrgencyColor(email.urgency_level)}`}>
                     {email.urgency_level} PRIORITY
                   </span>
-                  <span className={`text-[9px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider border ${getRequestTypeColor(email.request_type)}`}>
+                  <span className={`text-[9px] font-black px-3 py-1.5 rounded-lg uppercase tracking-widest border ${getRequestTypeColor(email.request_type)}`}>
                     {email.request_type}
                   </span>
-                  {email.order_number && (
-                    <span className="text-[9px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider border bg-purple-500/10 border-purple-500/20 text-purple-400">
-                      ORDER #{email.order_number}
-                    </span>
-                  )}
-                  <span className="text-slate-500 text-[10px] font-bold uppercase tracking-wider ml-auto">{email.timestamp}</span>
+                  <span className="text-slate-500 text-[10px] font-bold uppercase tracking-widest ml-auto">{email.timestamp}</span>
                 </div>
 
-                <h4 className={`font-bold text-lg tracking-tight mb-2 ${getTitleColor(email.urgency_level)}`}>{email.subject}</h4>
+                <h4 className="font-bold text-white text-xl tracking-tight mb-3">{email.subject}</h4>
 
-                <div className="flex flex-wrap items-center gap-3 mb-3">
-                  <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+                <div className="flex flex-wrap items-center gap-4 mb-4">
+                  <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">
                     FROM: <span className="text-slate-200 normal-case tracking-normal ml-1">{email.sender}</span>
                   </p>
                   {email.phone && (
                     <a 
                       href={`tel:${email.phone}`}
-                      className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 text-green-400 px-2.5 py-1 rounded-lg text-xs font-bold hover:bg-green-500 hover:text-white transition-all"
+                      className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 text-green-400 px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest hover:bg-green-500 hover:text-white transition-all"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <Phone size={12} /> {email.phone}
@@ -252,9 +182,9 @@ const EmailSummaries: React.FC = () => {
                 </div>
 
                 {email.vehicles && email.vehicles.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mb-3">
+                  <div className="flex flex-wrap gap-2 mb-4">
                     {email.vehicles.map((vehicle: any, idx: number) => (
-                      <span key={idx} className="flex items-center gap-2 bg-slate-900/50 border border-slate-700 text-slate-300 px-2.5 py-1 rounded-lg text-xs font-bold">
+                      <span key={idx} className="flex items-center gap-2 bg-slate-900/50 border border-slate-700 text-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold">
                         <Wrench size={12} className="text-blue-400" />
                         {vehicle.year} {vehicle.make} {vehicle.model}
                       </span>
@@ -262,17 +192,17 @@ const EmailSummaries: React.FC = () => {
                   </div>
                 )}
 
-                <p className="text-slate-400 text-sm leading-relaxed font-medium mb-3 bg-slate-900/30 p-3 rounded-xl border border-slate-800/30">
+                <p className="text-slate-400 text-sm leading-relaxed font-medium mb-4 bg-slate-900/30 p-4 rounded-xl border border-slate-800/30">
                   {email.summary}
                 </p>
 
                 {email.action_items && email.action_items.length > 0 && (
-                  <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-3">
-                    <p className="text-[9px] font-black uppercase tracking-wider text-slate-500 mb-2">ACTION ITEMS:</p>
-                    <div className="space-y-1.5">
+                  <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-3">ACTION ITEMS:</p>
+                    <div className="space-y-2">
                       {email.action_items.map((item: string, idx: number) => (
-                        <div key={idx} className="flex items-start gap-2 text-sm text-slate-300">
-                          <Square size={14} className="text-slate-600 mt-0.5 flex-shrink-0" />
+                        <div key={idx} className="flex items-start gap-3 text-sm text-slate-300">
+                          <Square size={16} className="text-slate-600 mt-0.5 flex-shrink-0" />
                           <span className="font-medium">{item}</span>
                         </div>
                       ))}
@@ -282,9 +212,9 @@ const EmailSummaries: React.FC = () => {
               </div>
             ))
           ) : (
-            <div className="text-center py-16 opacity-20">
-               <Mail size={48} className="mx-auto mb-3" />
-               <p className="text-xs font-black uppercase tracking-[0.3em]">No Emails in {selectedTab}</p>
+            <div className="text-center py-20 opacity-20">
+               <Mail size={64} className="mx-auto mb-4" />
+               <p className="text-xs font-black uppercase tracking-[0.3em]">No Summaries Available</p>
             </div>
           )}
         </div>
