@@ -81,8 +81,8 @@ const EmailSummaries: React.FC = () => {
   const getUrgencyColor = (level: string) => {
     switch (level) {
       case 'high': return 'bg-red-500/10 border-red-500/30 text-red-400';
-      case 'medium': return 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400';
-      case 'low': return 'bg-slate-500/10 border-slate-500/30 text-slate-400';
+      case 'medium': return 'bg-orange-500/10 border-orange-500/30 text-orange-400';
+      case 'low': return 'bg-blue-500/10 border-blue-500/30 text-blue-400';
       default: return 'bg-slate-800 border-slate-700 text-slate-400';
     }
   };
@@ -161,6 +161,11 @@ const EmailSummaries: React.FC = () => {
                   <span className={`text-[9px] font-black px-3 py-1.5 rounded-lg uppercase tracking-widest border ${getRequestTypeColor(email.request_type)}`}>
                     {email.request_type}
                   </span>
+                  {email.order_number && (
+                    <span className="text-[9px] font-black px-3 py-1.5 rounded-lg uppercase tracking-widest border bg-purple-500/10 border-purple-500/20 text-purple-400">
+                      ORDER #{email.order_number}
+                    </span>
+                  )}
                   <span className="text-slate-500 text-[10px] font-bold uppercase tracking-widest ml-auto">{email.timestamp}</span>
                 </div>
 
