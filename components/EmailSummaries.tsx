@@ -20,7 +20,6 @@ const EmailSummaries: React.FC = () => {
       const dbEmails = await fetchFromSupabase();
       
       const transformed = dbEmails.map((email) => {
-        // Safely parse JSON fields
         let vehicles = [];
         let actionItems = [];
         
@@ -155,7 +154,6 @@ const EmailSummaries: React.FC = () => {
                 key={email.id} 
                 className={`group relative rounded-3xl p-6 border transition-all duration-300 hover:shadow-2xl cursor-pointer ${getUrgencyColor(email.urgency_level)}`}
               >
-                {/* Header: Urgency, Type, Time */}
                 <div className="flex flex-wrap items-center gap-3 mb-4">
                   <span className={`text-[9px] font-black px-3 py-1.5 rounded-lg uppercase tracking-widest border ${getUrgencyColor(email.urgency_level)}`}>
                     {email.urgency_level} PRIORITY
@@ -171,10 +169,8 @@ const EmailSummaries: React.FC = () => {
                   <span className="text-slate-500 text-[10px] font-bold uppercase tracking-widest ml-auto">{email.timestamp}</span>
                 </div>
 
-                {/* Subject */}
                 <h4 className="font-bold text-white text-xl tracking-tight mb-3">{email.subject}</h4>
 
-                {/* Sender + Phone */}
                 <div className="flex flex-wrap items-center gap-4 mb-4">
                   <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">
                     FROM: <span className="text-slate-200 normal-case tracking-normal ml-1">{email.sender}</span>
@@ -190,7 +186,6 @@ const EmailSummaries: React.FC = () => {
                   )}
                 </div>
 
-                {/* Vehicles */}
                 {email.vehicles && email.vehicles.length > 0 && (
                   <div className="flex flex-wrap gap-2 mb-4">
                     {email.vehicles.map((vehicle: any, idx: number) => (
@@ -202,12 +197,10 @@ const EmailSummaries: React.FC = () => {
                   </div>
                 )}
 
-                {/* Summary */}
                 <p className="text-slate-400 text-sm leading-relaxed font-medium mb-4 bg-slate-900/30 p-4 rounded-xl border border-slate-800/30">
                   {email.summary}
                 </p>
 
-                {/* Action Items */}
                 {email.action_items && email.action_items.length > 0 && (
                   <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
                     <p className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-3">ACTION ITEMS:</p>
@@ -228,3 +221,11 @@ const EmailSummaries: React.FC = () => {
                <Mail size={64} className="mx-auto mb-4" />
                <p className="text-xs font-black uppercase tracking-[0.3em]">No Summaries Available</p>
             </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default EmailSummaries;
