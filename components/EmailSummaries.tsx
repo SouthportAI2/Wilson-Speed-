@@ -51,6 +51,7 @@ const EmailSummaries: React.FC = () => {
           order_number: email.order_number,
           urgency_level: email.urgency_level || 'medium',
           request_type: email.request_type || 'general',
+          received_at: new Date(email.received_at),
           timestamp: new Date(email.received_at).toLocaleString('en-US', { 
             month: 'short',
             day: 'numeric',
@@ -60,7 +61,15 @@ const EmailSummaries: React.FC = () => {
         };
       });
       
-      setEmails(transformed);
+      // Sort by priority first (high -> medium -> low), then by time (newest first)
+      const priorityOrder = { high: 0, medium: 1, low: 2 };
+      const sorted = transformed.sort((a, b) => {
+        const priorityDiff = priorityOrder[a.urgency_level] - priorityOrder[b.urgency_level];
+        if (priorityDiff !== 0) return priorityDiff;
+        return b.received_at.getTime() - a.received_at.getTime();
+      });
+      
+      setEmails(sorted);
       setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
     } catch (err) {
       console.error("Failed to fetch email summaries:", err);
@@ -77,6 +86,31 @@ const EmailSummaries: React.FC = () => {
     }, AUTO_REFRESH_INTERVAL);
     return () => clearInterval(intervalId);
   }, [fetchEmails]);
+
+  const getDateGroup = (date: Date) => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const weekAgo = new Date(today);
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    
+    const emailDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    
+    if (emailDate.getTime() === today.getTime()) return 'TODAY';
+    if (emailDate.getTime() === yesterday.getTime()) return 'YESTERDAY';
+    if (emailDate >= weekAgo) return 'THIS WEEK';
+    return 'OLDER';
+  };
+
+  const groupedEmails = emails.reduce((groups, email) => {
+    const group = getDateGroup(email.received_at);
+    if (!groups[group]) groups[group] = [];
+    groups[group].push(email);
+    return groups;
+  }, {} as Record<string, any[]>);
+
+  const groupOrder = ['TODAY', 'YESTERDAY', 'THIS WEEK', 'OLDER'];
 
   const getUrgencyColor = (level: string) => {
     switch (level) {
@@ -139,7 +173,7 @@ const EmailSummaries: React.FC = () => {
           </div>
         )}
 
-        <div className="space-y-4">
+        <div className="space-y-8">
           {loading && emails.length === 0 ? (
              <div className="flex flex-col items-center justify-center py-24 text-slate-500 gap-4">
                 <div className="relative w-12 h-12">
@@ -149,73 +183,92 @@ const EmailSummaries: React.FC = () => {
                 <p className="text-[10px] font-black uppercase tracking-[0.3em] animate-pulse">Establishing Secure Handshake...</p>
              </div>
           ) : emails.length > 0 ? (
-            emails.map((email) => (
-              <div 
-                key={email.id} 
-                className={`group relative rounded-3xl p-6 border transition-all duration-300 hover:shadow-2xl cursor-pointer ${getUrgencyColor(email.urgency_level)}`}
-              >
-                <div className="flex flex-wrap items-center gap-3 mb-4">
-                  <span className={`text-[9px] font-black px-3 py-1.5 rounded-lg uppercase tracking-widest border ${getUrgencyColor(email.urgency_level)}`}>
-                    {email.urgency_level} PRIORITY
-                  </span>
-                  <span className={`text-[9px] font-black px-3 py-1.5 rounded-lg uppercase tracking-widest border ${getRequestTypeColor(email.request_type)}`}>
-                    {email.request_type}
-                  </span>
-                  {email.order_number && (
-                    <span className="text-[9px] font-black px-3 py-1.5 rounded-lg uppercase tracking-widest border bg-purple-500/10 border-purple-500/20 text-purple-400">
-                      ORDER #{email.order_number}
-                    </span>
-                  )}
-                  <span className="text-slate-500 text-[10px] font-bold uppercase tracking-widest ml-auto">{email.timestamp}</span>
-                </div>
+            groupOrder.map(group => {
+              const groupEmails = groupedEmails[group];
+              if (!groupEmails || groupEmails.length === 0) return null;
+              
+              return (
+                <div key={group} className="space-y-4">
+                  {/* Date Group Header */}
+                  <div className="flex items-center gap-4">
+                    <h4 className="text-lg font-black text-white uppercase tracking-wider">{group}</h4>
+                    <div className="flex-1 h-px bg-gradient-to-r from-slate-700 to-transparent" />
+                    <span className="text-xs font-bold text-slate-500">{groupEmails.length} {groupEmails.length === 1 ? 'EMAIL' : 'EMAILS'}</span>
+                  </div>
+                  
+                  {/* Emails in this group */}
+                  <div className="space-y-3">
+                    {groupEmails.map((email) => (
+                      <div 
+                        key={email.id} 
+                        className={`group relative rounded-3xl p-6 border transition-all duration-300 hover:shadow-2xl cursor-pointer ${getUrgencyColor(email.urgency_level)}`}
+                      >
+                        <div className="flex flex-wrap items-center gap-3 mb-4">
+                          <span className={`text-[9px] font-black px-3 py-1.5 rounded-lg uppercase tracking-widest border ${getUrgencyColor(email.urgency_level)}`}>
+                            {email.urgency_level} PRIORITY
+                          </span>
+                          <span className={`text-[9px] font-black px-3 py-1.5 rounded-lg uppercase tracking-widest border ${getRequestTypeColor(email.request_type)}`}>
+                            {email.request_type}
+                          </span>
+                          {email.order_number && (
+                            <span className="text-[9px] font-black px-3 py-1.5 rounded-lg uppercase tracking-widest border bg-purple-500/10 border-purple-500/20 text-purple-400">
+                              ORDER #{email.order_number}
+                            </span>
+                          )}
+                          <span className="text-slate-500 text-[10px] font-bold uppercase tracking-widest ml-auto">{email.timestamp}</span>
+                        </div>
 
-                <h4 className="font-bold text-white text-xl tracking-tight mb-3">{email.subject}</h4>
+                        <h4 className="font-bold text-white text-xl tracking-tight mb-3">{email.subject}</h4>
 
-                <div className="flex flex-wrap items-center gap-4 mb-4">
-                  <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">
-                    FROM: <span className="text-slate-200 normal-case tracking-normal ml-1">{email.sender}</span>
-                  </p>
-                  {email.phone && (
-                    <a 
-                      href={`tel:${email.phone}`}
-                      className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 text-green-400 px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest hover:bg-green-500 hover:text-white transition-all"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <Phone size={12} /> {email.phone}
-                    </a>
-                  )}
-                </div>
+                        <div className="flex flex-wrap items-center gap-4 mb-4">
+                          <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">
+                            FROM: <span className="text-slate-200 normal-case tracking-normal ml-1">{email.sender}</span>
+                          </p>
+                          {email.phone && (
+                            <a 
+                              href={`tel:${email.phone}`}
+                              className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 text-green-400 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-green-500 hover:text-white transition-all"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <Phone size={12} /> {email.phone}
+                            </a>
+                          )}
+                        </div>
 
-                {email.vehicles && email.vehicles.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mb-4">
-                    {email.vehicles.map((vehicle: any, idx: number) => (
-                      <span key={idx} className="flex items-center gap-2 bg-slate-900/50 border border-slate-700 text-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold">
-                        <Wrench size={12} className="text-blue-400" />
-                        {vehicle.year} {vehicle.make} {vehicle.model}
-                      </span>
+                        {email.vehicles && email.vehicles.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mb-4">
+                            {email.vehicles.map((vehicle: any, idx: number) => (
+                              <span key={idx} className="flex items-center gap-2 bg-slate-900/50 border border-slate-700 text-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold">
+                                <Wrench size={12} className="text-blue-400" />
+                                {vehicle.year} {vehicle.make} {vehicle.model}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        <p className="text-slate-400 text-sm leading-relaxed font-medium mb-4 bg-slate-900/30 p-4 rounded-xl border border-slate-800/30">
+                          {email.summary}
+                        </p>
+
+                        {email.action_items && email.action_items.length > 0 && (
+                          <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+                            <p className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-3">ACTION ITEMS:</p>
+                            <div className="space-y-2">
+                              {email.action_items.map((item: string, idx: number) => (
+                                <div key={idx} className="flex items-start gap-3 text-sm text-slate-300">
+                                  <Square size={16} className="text-slate-600 mt-0.5 flex-shrink-0" />
+                                  <span className="font-medium">{item}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     ))}
                   </div>
-                )}
-
-                <p className="text-slate-400 text-sm leading-relaxed font-medium mb-4 bg-slate-900/30 p-4 rounded-xl border border-slate-800/30">
-                  {email.summary}
-                </p>
-
-                {email.action_items && email.action_items.length > 0 && (
-                  <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
-                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-3">ACTION ITEMS:</p>
-                    <div className="space-y-2">
-                      {email.action_items.map((item: string, idx: number) => (
-                        <div key={idx} className="flex items-start gap-3 text-sm text-slate-300">
-                          <Square size={16} className="text-slate-600 mt-0.5 flex-shrink-0" />
-                          <span className="font-medium">{item}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))
+                </div>
+              );
+            })
           ) : (
             <div className="text-center py-20 opacity-20">
                <Mail size={64} className="mx-auto mb-4" />
