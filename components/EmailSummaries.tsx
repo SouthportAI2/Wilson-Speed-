@@ -1,15 +1,82 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Mail, RefreshCw, AlertCircle, Package, UserCheck, Clock, ShieldCheck, Zap, Activity, Phone, Wrench, CheckSquare, Square } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Mail, RefreshCw, AlertCircle, Package, UserCheck, Clock, ShieldCheck, Zap, Activity } from 'lucide-react';
+import { generateEmailSummaries } from '../services/gemini';
 import { EmailSummary, InfrastructureConfig } from '../types';
 import { fetchEmailSummaries as fetchFromSupabase } from '../services/supabaseClient';
 
 const AUTO_REFRESH_INTERVAL = 20 * 60 * 1000; // 20 minutes
+const STATS_STORAGE_KEY = 'southport_daily_stats';
+
+interface DailyStats {
+  pendingQuotes: number;
+  partsArriving: number;
+  urgentAlerts: number;
+  lastResetTimestamp: number;
+}
 
 const EmailSummaries: React.FC = () => {
-  const [emails, setEmails] = useState<any[]>([]);
+  const [emails, setEmails] = useState<EmailSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string>('Not yet updated');
+  const [config, setConfig] = useState<InfrastructureConfig | any>(null);
   const [error, setError] = useState<string | null>(null);
+  
+  // Daily Stats State
+  const [stats, setStats] = useState<DailyStats>({
+    pendingQuotes: 12,
+    partsArriving: 5,
+    urgentAlerts: 3,
+    lastResetTimestamp: Date.now()
+  });
+
+  // Initialize and check for 5 AM reset
+  const checkAndResetStats = useCallback(() => {
+    const savedStats = localStorage.getItem(STATS_STORAGE_KEY);
+    const now = new Date();
+    
+    // Calculate today's 5 AM
+    const today5AM = new Date();
+    today5AM.setHours(5, 0, 0, 0);
+
+    let currentStats: DailyStats;
+
+    if (savedStats) {
+      currentStats = JSON.parse(savedStats);
+      const lastReset = new Date(currentStats.lastResetTimestamp);
+      
+      // If the last reset was BEFORE today's 5 AM, and we are now AFTER today's 5 AM, reset.
+      if (lastReset < today5AM && now >= today5AM) {
+        currentStats = {
+          pendingQuotes: 0,
+          partsArriving: 0,
+          urgentAlerts: 0,
+          lastResetTimestamp: now.getTime()
+        };
+      }
+    } else {
+      // First time initialization
+      currentStats = {
+        pendingQuotes: 12, // Initial mock values
+        partsArriving: 5,
+        urgentAlerts: 3,
+        lastResetTimestamp: now.getTime()
+      };
+    }
+
+    setStats(currentStats);
+    localStorage.setItem(STATS_STORAGE_KEY, JSON.stringify(currentStats));
+  }, []);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('southport_config');
+    if (saved) setConfig(JSON.parse(saved));
+    
+    checkAndResetStats();
+
+    // Check for reset every minute in case the app is left open past 5 AM
+    const resetCheckInterval = setInterval(checkAndResetStats, 60000);
+    return () => clearInterval(resetCheckInterval);
+  }, [checkAndResetStats]);
 
   const fetchEmails = useCallback(async (isAuto = false) => {
     if (!isAuto) setLoading(true);
@@ -20,44 +87,20 @@ const EmailSummaries: React.FC = () => {
       
       const dbEmails = await fetchFromSupabase();
       
-      const transformed = dbEmails.map((email) => {
-        // Parse JSON fields
-        let vehicles = [];
-        let actionItems = [];
-        
-        try {
-          vehicles = email.vehicles ? JSON.parse(email.vehicles) : [];
-        } catch (e) {
-          console.warn('Failed to parse vehicles:', e);
-        }
-        
-        try {
-          actionItems = email.action_items ? JSON.parse(email.action_items) : [];
-        } catch (e) {
-          console.warn('Failed to parse action_items:', e);
-        }
-        
-        return {
-          id: email.id,
-          sender_name: email.sender_name,
-          sender_email: email.sender_email,
-          subject: email.subject,
-          summary: email.summary,
-          phone: email.phone,
-          vehicles: vehicles,
-          action_items: actionItems,
-          order_number: email.order_number,
-          urgency_level: email.urgency_level || 'medium',
-          request_type: email.request_type || 'general',
-          timestamp: new Date(email.received_at).toLocaleString('en-US', { 
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit', 
-            minute: '2-digit'
-          }),
-          received_at: email.received_at
-        };
-      });
+      const transformed = dbEmails.map((email) => ({
+        id: email.id,
+        sender: email.sender_name || email.sender_email,
+        subject: email.subject,
+        summary: email.summary,
+        timestamp: new Date(email.received_at).toLocaleString('en-US', { 
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit', 
+          minute: '2-digit'
+        }),
+        category: email.summary.toLowerCase().includes('urgent') ? 'URGENT' : 
+                  email.summary.toLowerCase().includes('part') ? 'PARTS' : 'CUSTOMER'
+      }));
       
       setEmails(transformed);
       setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
@@ -67,7 +110,7 @@ const EmailSummaries: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [config]);
 
   useEffect(() => {
     fetchEmails();
@@ -77,22 +120,21 @@ const EmailSummaries: React.FC = () => {
     return () => clearInterval(intervalId);
   }, [fetchEmails]);
 
-  const getUrgencyColor = (level: string) => {
-    switch (level) {
-      case 'high': return 'bg-red-500/10 border-red-500/30 text-red-400';
-      case 'medium': return 'bg-orange-500/10 border-orange-500/30 text-orange-400';
-      case 'low': return 'bg-blue-500/10 border-blue-500/30 text-blue-400';
+  const getCategoryColor = (cat: string) => {
+    switch (cat) {
+      case 'URGENT': return 'bg-red-500/10 border-red-500/20 text-red-400';
+      case 'PARTS': return 'bg-orange-500/10 border-orange-500/20 text-orange-400';
+      case 'CUSTOMER': return 'bg-blue-500/10 border-blue-500/20 text-blue-400';
       default: return 'bg-slate-800 border-slate-700 text-slate-400';
     }
   };
 
-  const getRequestTypeColor = (type: string) => {
-    switch (type) {
-      case 'repair': return 'bg-red-500/10 border-red-500/20 text-red-400';
-      case 'parts': return 'bg-orange-500/10 border-orange-500/20 text-orange-400';
-      case 'quote': return 'bg-purple-500/10 border-purple-500/20 text-purple-400';
-      case 'appointment': return 'bg-green-500/10 border-green-500/20 text-green-400';
-      default: return 'bg-blue-500/10 border-blue-500/20 text-blue-400';
+  const getCategoryIcon = (cat: string) => {
+    switch (cat) {
+      case 'URGENT': return <AlertCircle className="text-red-400" />;
+      case 'PARTS': return <Package className="text-orange-400" />;
+      case 'CUSTOMER': return <UserCheck className="text-blue-400" />;
+      default: return <Mail className="text-slate-400" />;
     }
   };
 
@@ -153,74 +195,33 @@ const EmailSummaries: React.FC = () => {
             emails.map((email) => (
               <div 
                 key={email.id} 
-                className={`group relative rounded-3xl p-6 border transition-all duration-300 ${getUrgencyColor(email.urgency_level)} hover:shadow-2xl cursor-pointer`}
+                className="group relative bg-slate-950/40 rounded-3xl p-6 border border-slate-800/50 hover:border-blue-500/30 transition-all duration-300 hover:shadow-2xl hover:shadow-blue-900/10 cursor-pointer"
               >
-                {/* Header: Urgency, Type, Time */}
-                <div className="flex flex-wrap items-center gap-3 mb-4">
-                  <span className={`text-[9px] font-black px-3 py-1.5 rounded-lg uppercase tracking-widest border ${getUrgencyColor(email.urgency_level)}`}>
-                    {email.urgency_level} PRIORITY
-                  </span>
-                  <span className={`text-[9px] font-black px-3 py-1.5 rounded-lg uppercase tracking-widest border ${getRequestTypeColor(email.request_type)}`}>
-                    {email.request_type}
-                  </span>
-                  {email.order_number && (
-                    <span className="text-[9px] font-black px-3 py-1.5 rounded-lg uppercase tracking-widest border bg-purple-500/10 border-purple-500/20 text-purple-400">
-                      ORDER #{email.order_number}
-                    </span>
-                  )}
-                  <span className="text-slate-500 text-[10px] font-bold uppercase tracking-widest ml-auto">{email.timestamp}</span>
-                </div>
-
-                {/* Subject */}
-                <h4 className="font-bold text-white text-xl tracking-tight mb-3">{email.subject}</h4>
-
-                {/* Sender + Phone */}
-                <div className="flex flex-wrap items-center gap-4 mb-4">
-                  <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">
-                    FROM: <span className="text-slate-200 normal-case tracking-normal ml-1">{email.sender_name}</span>
-                  </p>
-                  {email.phone && (
-                    <a 
-                      href={`tel:${email.phone}`}
-                      className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 text-green-400 px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest hover:bg-green-500 hover:text-white transition-all"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <Phone size={12} /> {email.phone}
-                    </a>
-                  )}
-                </div>
-
-                {/* Vehicles */}
-                {email.vehicles && email.vehicles.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mb-4">
-                    {email.vehicles.map((vehicle: any, idx: number) => (
-                      <span key={idx} className="flex items-center gap-2 bg-slate-900/50 border border-slate-700 text-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold">
-                        <Wrench size={12} className="text-blue-400" />
-                        {vehicle.year} {vehicle.make} {vehicle.model}
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                {/* Summary */}
-                <p className="text-slate-400 text-sm leading-relaxed font-medium mb-4 bg-slate-900/30 p-4 rounded-xl border border-slate-800/30">
-                  {email.summary}
-                </p>
-
-                {/* Action Items */}
-                {email.action_items && email.action_items.length > 0 && (
-                  <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
-                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-3">ACTION ITEMS:</p>
+                <div className="flex flex-col md:flex-row items-start justify-between gap-6">
+                  <div className="flex gap-6">
+                    <div className={`p-4 rounded-2xl h-fit border shadow-inner ${getCategoryColor(email.category)}`}>
+                      {getCategoryIcon(email.category)}
+                    </div>
                     <div className="space-y-2">
-                      {email.action_items.map((item: string, idx: number) => (
-                        <div key={idx} className="flex items-start gap-3 text-sm text-slate-300">
-                          <Square size={16} className="text-slate-600 mt-0.5 flex-shrink-0" />
-                          <span className="font-medium">{item}</span>
-                        </div>
-                      ))}
+                      <div className="flex items-center gap-3">
+                        <span className={`text-[10px] font-black px-2.5 py-1 rounded-lg uppercase tracking-widest border ${getCategoryColor(email.category)}`}>
+                          {email.category}
+                        </span>
+                        <span className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">{email.timestamp}</span>
+                      </div>
+                      <h4 className="font-bold text-white text-xl tracking-tight group-hover:text-blue-400 transition-colors">{email.subject}</h4>
+                      <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Sender: <span className="text-slate-200 normal-case tracking-normal ml-1">{email.sender}</span></p>
+                      <p className="text-slate-400 text-sm leading-relaxed font-medium mt-4 bg-slate-900/30 p-4 rounded-xl border border-slate-800/30">
+                        {email.summary}
+                      </p>
                     </div>
                   </div>
-                )}
+                  <div className="opacity-0 group-hover:opacity-100 transition-all transform translate-x-4 group-hover:translate-x-0">
+                    <button className="flex items-center gap-2 bg-blue-600/10 text-blue-400 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest border border-blue-500/20 hover:bg-blue-600 hover:text-white transition-all">
+                      Open <ShieldCheck size={14} />
+                    </button>
+                  </div>
+                </div>
               </div>
             ))
           ) : (
@@ -231,8 +232,27 @@ const EmailSummaries: React.FC = () => {
           )}
         </div>
       </div>
+      
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <StatCard label="Pending Quotes" value={stats.pendingQuotes.toString()} color="text-blue-400" />
+        <StatCard label="Parts Arriving" value={stats.partsArriving.toString()} color="text-orange-400" />
+        <StatCard label="Urgent Alerts" value={stats.urgentAlerts.toString()} color="text-red-400" />
+      </div>
+
+      <div className="text-center">
+        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">
+          Infrastructure Reset Cycle: <span className="text-slate-400">Daily @ 05:00 AM</span>
+        </p>
+      </div>
     </div>
   );
 };
+
+const StatCard = ({ label, value, color }: { label: string, value: string, color: string }) => (
+  <div className="bg-slate-900/40 p-8 rounded-[2rem] border border-slate-800 shadow-xl text-center group hover:border-blue-500/30 transition-all duration-500">
+     <div className={`text-4xl font-black mb-2 tracking-tighter ${color} group-hover:scale-110 transition-transform`}>{value}</div>
+     <div className="text-[10px] text-slate-500 font-black uppercase tracking-[0.2em]">{label}</div>
+  </div>
+);
 
 export default EmailSummaries;
