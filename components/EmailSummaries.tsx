@@ -46,7 +46,7 @@ const EmailSummaries: React.FC = () => {
           sender_email: email.sender_email,
           subject: email.subject,
           summary: email.summary,
-          phone: email.phone,
+          phone: email.phone && email.phone !== '=' ? email.phone : null,
           vehicles: vehicles,
           action_items: actionItems,
           urgency_level: email.urgency_level || 'medium',
@@ -61,7 +61,6 @@ const EmailSummaries: React.FC = () => {
         };
       });
       
-      // Sort by priority first (high -> medium -> low), then by time (newest first)
       const priorityOrder = { high: 0, medium: 1, low: 2 };
       const sorted = transformed.sort((a, b) => {
         const priorityDiff = priorityOrder[a.urgency_level] - priorityOrder[b.urgency_level];
@@ -179,7 +178,6 @@ const EmailSummaries: React.FC = () => {
           </button>
         </div>
 
-        {/* TABS */}
         <div className="flex gap-2 mb-6">
           {tabs.map(tab => (
             <button
@@ -220,10 +218,10 @@ const EmailSummaries: React.FC = () => {
               >
                 <div className="flex flex-wrap items-center gap-2 mb-3">
                   <span className={`text-[9px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider border ${getUrgencyBadgeColor(email.urgency_level)}`}>
-                    HIGH PRIORITY
+                    {email.urgency_level.toUpperCase()} PRIORITY
                   </span>
                   <span className={`text-[9px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider border ${getRequestTypeColor(email.request_type)}`}>
-                    REPAIR
+                    {email.request_type.toUpperCase()}
                   </span>
                   <span className="text-slate-500 text-[10px] font-bold uppercase tracking-wider ml-auto">{email.timestamp}</span>
                 </div>
