@@ -134,12 +134,17 @@ const EmailSummaries: React.FC = () => {
   const cleanSummary = (summary: string) => {
     if (!summary) return '';
     
-    // Strip ALL variations of urgency prefixes including leading equal signs, colons and whitespace
-    // Specifically targets: "=", "=HIGH:", "=MEDIUM:", "=LOW:", "HIGH:", "MEDIUM:", "LOW:"
-    return summary
-      .replace(/^[\s=]*(HIGH|MEDIUM|LOW)[\s=:]*/gi, '')
-      .replace(/^[\s=]+/g, '')
-      .trim();
+    let cleaned = summary.trim();
+    
+    // Keep removing until nothing matches - catches multiple variations
+    while (cleaned.match(/^[=\s]*(HIGH|MEDIUM|LOW)[=:\s]*/i)) {
+      cleaned = cleaned.replace(/^[=\s]*(HIGH|MEDIUM|LOW)[=:\s]*/i, '');
+    }
+    
+    // Remove any remaining leading = or whitespace
+    cleaned = cleaned.replace(/^[=\s]+/, '');
+    
+    return cleaned.trim();
   };
 
   const getQuickSummary = (email: any) => {
@@ -158,10 +163,8 @@ const EmailSummaries: React.FC = () => {
   return (
     <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 text-left">
       <div className="bg-slate-900/40 backdrop-blur-md border border-slate-800 rounded-3xl p-6 shadow-2xl relative overflow-hidden">
-        {/* Background Decorative Blur */}
         <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/5 blur-[100px] -mr-32 -mt-32 pointer-events-none" />
         
-        {/* Header Section - Adding relative z-10 to ensure clicks aren't blocked */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8 border-b border-slate-800 pb-6 relative z-10">
           <div className="flex items-center gap-4">
             <div className="p-3 bg-blue-600 rounded-xl text-white shadow-xl shadow-blue-900/20">
@@ -225,7 +228,6 @@ const EmailSummaries: React.FC = () => {
           </div>
         ) : filteredEmails.length > 0 ? (
           <div className="relative z-10">
-            {/* QUICK SUMMARY BLOCK */}
             <div className="bg-slate-950/60 border border-slate-700 rounded-2xl p-5 mb-6">
               <div className="flex items-center gap-3 mb-4">
                 <List size={20} className="text-blue-400" />
@@ -248,7 +250,6 @@ const EmailSummaries: React.FC = () => {
               </div>
             </div>
 
-            {/* DETAILED CARDS */}
             <div className="space-y-3">
               <h4 className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Detailed View</h4>
               {filteredEmails.map((email) => (
@@ -310,7 +311,7 @@ const EmailSummaries: React.FC = () => {
                         ))}
                       </div>
                     </div>
-                   )}
+                  )}
                 </div>
               ))}
             </div>
