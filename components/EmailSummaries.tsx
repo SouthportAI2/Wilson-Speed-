@@ -134,18 +134,12 @@ const EmailSummaries: React.FC = () => {
   const cleanSummary = (summary: string) => {
     if (!summary) return '';
     
-    // Strip ALL variations of urgency prefixes including multiple equal signs
-    let result = summary
-      .replace(/^=+HIGH:\s*/gi, '')
-      .replace(/^=+MEDIUM:\s*/gi, '')
-      .replace(/^=+LOW:\s*/gi, '')
-      .replace(/^HIGH:\s*/gi, '')
-      .replace(/^MEDIUM:\s*/gi, '')
-      .replace(/^LOW:\s*/gi, '')
-      .replace(/^=+/g, '')
+    // Strip ALL variations of urgency prefixes including leading equal signs, colons and whitespace
+    // Specifically targets: "=", "=HIGH:", "=MEDIUM:", "=LOW:", "HIGH:", "MEDIUM:", "LOW:"
+    return summary
+      .replace(/^[\s=]*(HIGH|MEDIUM|LOW)[\s=:]*/gi, '')
+      .replace(/^[\s=]+/g, '')
       .trim();
-    
-    return result;
   };
 
   const getQuickSummary = (email: any) => {
@@ -164,9 +158,11 @@ const EmailSummaries: React.FC = () => {
   return (
     <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 text-left">
       <div className="bg-slate-900/40 backdrop-blur-md border border-slate-800 rounded-3xl p-6 shadow-2xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/5 blur-[100px] -mr-32 -mt-32" />
+        {/* Background Decorative Blur */}
+        <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/5 blur-[100px] -mr-32 -mt-32 pointer-events-none" />
         
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8 border-b border-slate-800 pb-6">
+        {/* Header Section - Adding relative z-10 to ensure clicks aren't blocked */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8 border-b border-slate-800 pb-6 relative z-10">
           <div className="flex items-center gap-4">
             <div className="p-3 bg-blue-600 rounded-xl text-white shadow-xl shadow-blue-900/20">
               <Zap size={24} />
@@ -189,14 +185,14 @@ const EmailSummaries: React.FC = () => {
           <button 
             onClick={() => fetchEmails(false)}
             disabled={loading}
-            className="group flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-all active:scale-95 shadow-xl shadow-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed font-bold text-xs"
+            className="group flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-all active:scale-95 shadow-xl shadow-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed font-bold text-xs relative z-20"
           >
             <RefreshCw size={16} className={loading ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'} />
             {loading ? 'Refreshing...' : 'Refresh'}
           </button>
         </div>
 
-        <div className="flex gap-2 mb-6">
+        <div className="flex gap-2 mb-6 relative z-10">
           {tabs.map(tab => (
             <button
               key={tab}
@@ -213,14 +209,14 @@ const EmailSummaries: React.FC = () => {
         </div>
 
         {error && (
-          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-4 text-red-400">
+          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-4 text-red-400 relative z-10">
             <AlertCircle size={18} />
             <p className="text-xs font-bold">{error}</p>
           </div>
         )}
 
         {loading && emails.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-slate-500 gap-4">
+          <div className="flex flex-col items-center justify-center py-20 text-slate-500 gap-4 relative z-10">
             <div className="relative w-12 h-12">
               <div className="absolute inset-0 border-4 border-blue-500/20 rounded-full" />
               <div className="absolute inset-0 border-4 border-blue-500 rounded-full border-t-transparent animate-spin" />
@@ -228,7 +224,7 @@ const EmailSummaries: React.FC = () => {
             <p className="text-[10px] font-black uppercase tracking-[0.3em] animate-pulse">Loading...</p>
           </div>
         ) : filteredEmails.length > 0 ? (
-          <>
+          <div className="relative z-10">
             {/* QUICK SUMMARY BLOCK */}
             <div className="bg-slate-950/60 border border-slate-700 rounded-2xl p-5 mb-6">
               <div className="flex items-center gap-3 mb-4">
@@ -314,13 +310,13 @@ const EmailSummaries: React.FC = () => {
                         ))}
                       </div>
                     </div>
-                  )}
+             a     )}
                 </div>
               ))}
             </div>
-          </>
+          </div>
         ) : (
-          <div className="text-center py-16 opacity-20">
+          <div className="text-center py-16 opacity-20 relative z-10">
             <Mail size={48} className="mx-auto mb-3" />
             <p className="text-xs font-black uppercase tracking-[0.3em]">No Emails in {selectedTab}</p>
           </div>
