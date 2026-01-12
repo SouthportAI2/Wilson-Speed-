@@ -132,8 +132,16 @@ const EmailSummaries: React.FC = () => {
   };
 
   const cleanSummary = (summary: string) => {
-    // Remove any =HIGH:, =MEDIUM:, =LOW: or similar patterns from the beginning
-    return summary.replace(/^=?(HIGH|MEDIUM|LOW):\s*/i, '').trim();
+    if (!summary) return '';
+    // Remove =HIGH:, =MEDIUM:, =LOW: or HIGH:, MEDIUM:, LOW: from start
+    let cleaned = summary.replace(/^=HIGH:\s*/gi, '')
+                        .replace(/^=MEDIUM:\s*/gi, '')
+                        .replace(/^=LOW:\s*/gi, '')
+                        .replace(/^HIGH:\s*/gi, '')
+                        .replace(/^MEDIUM:\s*/gi, '')
+                        .replace(/^LOW:\s*/gi, '')
+                        .trim();
+    return cleaned;
   };
 
   const getQuickSummary = (email: any) => {
@@ -144,7 +152,6 @@ const EmailSummaries: React.FC = () => {
     const phoneText = email.phone ? ` - ${email.phone}` : '';
     const cleanedSummary = cleanSummary(email.summary);
     
-    // Show vehicle, full summary, phone (no customer name since it's redundant)
     return `${vehicleText ? vehicleText + ' - ' : ''}${cleanedSummary}${phoneText}`;
   };
 
