@@ -132,27 +132,21 @@ const EmailSummaries: React.FC = () => {
   };
 
   const cleanSummary = (summary: string) => {
-  if (!summary) return '';
-  
-  // Remove urgency prefixes one by one
-  let result = summary.trim();
-  
-  if (result.startsWith('=HIGH:')) {
-    result = result.substring(6).trim();
-  } else if (result.startsWith('=MEDIUM:')) {
-    result = result.substring(8).trim();
-  } else if (result.startsWith('=LOW:')) {
-    result = result.substring(5).trim();
-  } else if (result.startsWith('HIGH:')) {
-    result = result.substring(5).trim();
-  } else if (result.startsWith('MEDIUM:')) {
-    result = result.substring(7).trim();
-  } else if (result.startsWith('LOW:')) {
-    result = result.substring(4).trim();
-  }
-  
-  return result;
-};
+    if (!summary) return '';
+    
+    // Strip ALL variations of urgency prefixes including multiple equal signs
+    let result = summary
+      .replace(/^=+HIGH:\s*/gi, '')
+      .replace(/^=+MEDIUM:\s*/gi, '')
+      .replace(/^=+LOW:\s*/gi, '')
+      .replace(/^HIGH:\s*/gi, '')
+      .replace(/^MEDIUM:\s*/gi, '')
+      .replace(/^LOW:\s*/gi, '')
+      .replace(/^=+/g, '')
+      .trim();
+    
+    return result;
+  };
 
   const getQuickSummary = (email: any) => {
     const vehicleText = email.vehicles && email.vehicles.length > 0 
@@ -195,7 +189,7 @@ const EmailSummaries: React.FC = () => {
           <button 
             onClick={() => fetchEmails(false)}
             disabled={loading}
-            className="group flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-all active:scale-95 shadow-xl shadow-blue-900/20 disabled:opacity-50 font-bold text-xs"
+            className="group flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-all active:scale-95 shadow-xl shadow-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed font-bold text-xs"
           >
             <RefreshCw size={16} className={loading ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'} />
             {loading ? 'Refreshing...' : 'Refresh'}
