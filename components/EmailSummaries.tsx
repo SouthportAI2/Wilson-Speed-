@@ -26,7 +26,13 @@ const EmailSummaries: React.FC = () => {
         
         try {
           if (email.vehicles) {
-            vehicles = typeof email.vehicles === 'string' ? JSON.parse(email.vehicles) : email.vehicles;
+            let vehicleData = typeof email.vehicles === 'string' ? email.vehicles.trim() : email.vehicles;
+            if (typeof vehicleData === 'string') {
+              vehicleData = vehicleData.replace(/^[^[\{]+/, '');
+              vehicles = JSON.parse(vehicleData);
+            } else {
+              vehicles = vehicleData;
+            }
           }
         } catch (e) {
           console.warn('Failed to parse vehicles:', e);
@@ -34,7 +40,13 @@ const EmailSummaries: React.FC = () => {
         
         try {
           if (email.action_items) {
-            actionItems = typeof email.action_items === 'string' ? JSON.parse(email.action_items) : email.action_items;
+            let actionData = typeof email.action_items === 'string' ? email.action_items.trim() : email.action_items;
+            if (typeof actionData === 'string') {
+              actionData = actionData.replace(/^[^[\{]+/, '');
+              actionItems = JSON.parse(actionData);
+            } else {
+              actionItems = actionData;
+            }
           }
         } catch (e) {
           console.warn('Failed to parse action_items:', e);
@@ -136,12 +148,10 @@ const EmailSummaries: React.FC = () => {
     
     let cleaned = summary.trim();
     
-    // Keep removing until nothing matches - catches multiple variations
     while (cleaned.match(/^[=\s]*(HIGH|MEDIUM|LOW)[=:\s]*/i)) {
       cleaned = cleaned.replace(/^[=\s]*(HIGH|MEDIUM|LOW)[=:\s]*/i, '');
     }
     
-    // Remove any remaining leading = or whitespace
     cleaned = cleaned.replace(/^[=\s]+/, '');
     
     return cleaned.trim();
