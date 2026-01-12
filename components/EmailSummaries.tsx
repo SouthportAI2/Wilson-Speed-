@@ -54,6 +54,7 @@ const EmailSummaries: React.FC = () => {
         
         return {
           id: email.id,
+          gmail_id: email.gmail_id,
           sender: email.sender_name || email.sender_email,
           sender_email: email.sender_email,
           subject: email.subject,
@@ -73,8 +74,21 @@ const EmailSummaries: React.FC = () => {
         };
       });
       
+      // Remove duplicates by gmail_id - keep only the most recent entry
+      const uniqueEmails = transformed.reduce((acc, email) => {
+        const existing = acc.find(e => e.gmail_id === email.gmail_id);
+        if (!existing) {
+          acc.push(email);
+        } else if (email.received_at > existing.received_at) {
+          // Replace with newer version if duplicate found
+          const index = acc.indexOf(existing);
+          acc[index] = email;
+        }
+        return acc;
+      }, [] as any[]);
+      
       const priorityOrder = { high: 0, medium: 1, low: 2 };
-      const sorted = transformed.sort((a, b) => {
+      const sorted = uniqueEmails.sort((a, b) => {
         const priorityDiff = priorityOrder[a.urgency_level] - priorityOrder[b.urgency_level];
         if (priorityDiff !== 0) return priorityDiff;
         return b.received_at.getTime() - a.received_at.getTime();
@@ -146,15 +160,22 @@ const EmailSummaries: React.FC = () => {
   const cleanSummary = (summary: string) => {
     if (!summary) return '';
     
-    let cleaned = summary.trim();
+    let result = summary.trim();
     
-    while (cleaned.match(/^[=\s]*(HIGH|MEDIUM|LOW)[=:\s]*/i)) {
-      cleaned = cleaned.replace(/^[=\s]*(HIGH|MEDIUM|LOW)[=:\s]*/i, '');
+    // Remove exact prefix matches (most explicit approach possible)
+    if (result.startsWith('=LOW:')) result = result.substring(5).trim();
+    else if (result.startsWith('=MEDIUM:')) result = result.substring(8).trim();
+    else if (result.startsWith('=HIGH:')) result = result.substring(6).trim();
+    else if (result.startsWith('LOW:')) result = result.substring(4).trim();
+    else if (result.startsWith('MEDIUM:')) result = result.substring(7).trim();
+    else if (result.startsWith('HIGH:')) result = result.substring(5).trim();
+    
+    // Strip any remaining leading = characters
+    while (result.startsWith('=')) {
+      result = result.substring(1).trim();
     }
     
-    cleaned = cleaned.replace(/^[=\s]+/, '');
-    
-    return cleaned.trim();
+    return result;
   };
 
   const getQuickSummary = (email: any) => {
