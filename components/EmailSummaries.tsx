@@ -310,7 +310,7 @@ const EmailSummaries: React.FC = () => {
                         ))}
                       </div>
                     </div>
-             a     )}
+                   )}
                 </div>
               ))}
             </div>
