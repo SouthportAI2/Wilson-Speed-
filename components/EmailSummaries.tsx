@@ -131,14 +131,21 @@ const EmailSummaries: React.FC = () => {
     }
   };
 
+  const cleanSummary = (summary: string) => {
+    // Remove any =HIGH:, =MEDIUM:, =LOW: or similar patterns from the beginning
+    return summary.replace(/^=?(HIGH|MEDIUM|LOW):\s*/i, '').trim();
+  };
+
   const getQuickSummary = (email: any) => {
     const vehicleText = email.vehicles && email.vehicles.length > 0 
       ? `${email.vehicles[0].year} ${email.vehicles[0].make} ${email.vehicles[0].model}` 
       : '';
     
     const phoneText = email.phone ? ` - ${email.phone}` : '';
+    const cleanedSummary = cleanSummary(email.summary);
     
-    return `${vehicleText ? vehicleText + ' - ' : ''}${email.summary.substring(0, 80)}... ${email.sender}${phoneText}`;
+    // Show vehicle, full summary, phone (no customer name since it's redundant)
+    return `${vehicleText ? vehicleText + ' - ' : ''}${cleanedSummary}${phoneText}`;
   };
 
   const tabs = ['TODAY', 'YESTERDAY', 'LAST WEEK', 'OLDER'];
@@ -220,9 +227,9 @@ const EmailSummaries: React.FC = () => {
               <div className="space-y-3">
                 {filteredEmails.map((email) => (
                   <div key={email.id} className="flex items-start gap-3">
-                    <span className={`mt-1 font-black ${getBulletColor(email.urgency_level)}`}>•</span>
+                    <span className={`mt-1 font-black text-lg ${getBulletColor(email.urgency_level)}`}>•</span>
                     <div className="flex-1">
-                      <p className="text-sm">
+                      <p className="text-sm leading-relaxed">
                         <span className={`font-bold ${getTitleColor(email.urgency_level)}`}>
                           {email.urgency_level.toUpperCase()}:
                         </span>
@@ -281,7 +288,7 @@ const EmailSummaries: React.FC = () => {
                   )}
 
                   <p className="text-slate-400 text-sm leading-relaxed font-medium mb-3 bg-slate-900/30 p-3 rounded-xl border border-slate-800/30">
-                    {email.summary}
+                    {cleanSummary(email.summary)}
                   </p>
 
                   {email.action_items && email.action_items.length > 0 && (
