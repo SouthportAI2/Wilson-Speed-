@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Mail, RefreshCw, AlertCircle, Clock, Zap, Activity, Phone, Wrench, Square } from 'lucide-react';
+import { Mail, RefreshCw, AlertCircle, Clock, Zap, Activity, Phone, Wrench, Square, List } from 'lucide-react';
 import { fetchEmailSummaries as fetchFromSupabase } from '../services/supabaseClient';
 
 const AUTO_REFRESH_INTERVAL = 20 * 60 * 1000; // 20 minutes
@@ -46,7 +46,7 @@ const EmailSummaries: React.FC = () => {
           sender_email: email.sender_email,
           subject: email.subject,
           summary: email.summary,
-          phone: email.phone && email.phone !== '=' ? email.phone : null,
+          phone: email.phone && email.phone !== '=' && email.phone !== 'null' ? email.phone : null,
           vehicles: vehicles,
           action_items: actionItems,
           urgency_level: email.urgency_level || 'medium',
@@ -119,6 +119,15 @@ const EmailSummaries: React.FC = () => {
       case 'medium': return 'text-yellow-400';
       case 'low': return 'text-slate-400';
       default: return 'text-white';
+    }
+  };
+
+  const getBulletColor = (level: string) => {
+    switch (level) {
+      case 'high': return 'text-red-400';
+      case 'medium': return 'text-yellow-400';
+      case 'low': return 'text-slate-500';
+      default: return 'text-slate-400';
     }
   };
 
@@ -201,85 +210,119 @@ const EmailSummaries: React.FC = () => {
           </div>
         )}
 
-        <div className="space-y-3">
-          {loading && emails.length === 0 ? (
-             <div className="flex flex-col items-center justify-center py-20 text-slate-500 gap-4">
-                <div className="relative w-12 h-12">
-                  <div className="absolute inset-0 border-4 border-blue-500/20 rounded-full" />
-                  <div className="absolute inset-0 border-4 border-blue-500 rounded-full border-t-transparent animate-spin" />
-                </div>
-                <p className="text-[10px] font-black uppercase tracking-[0.3em] animate-pulse">Loading...</p>
-             </div>
-          ) : filteredEmails.length > 0 ? (
-            filteredEmails.map((email) => (
-              <div 
-                key={email.id} 
-                className={`group relative rounded-2xl p-4 border transition-all duration-300 hover:shadow-xl cursor-pointer ${getCardBorderColor(email.urgency_level)}`}
-              >
-                <div className="flex flex-wrap items-center gap-2 mb-3">
-                  <span className={`text-[9px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider border ${getUrgencyBadgeColor(email.urgency_level)}`}>
-                    {email.urgency_level.toUpperCase()} PRIORITY
-                  </span>
-                  <span className={`text-[9px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider border ${getRequestTypeColor(email.request_type)}`}>
-                    {email.request_type.toUpperCase()}
-                  </span>
-                  <span className="text-slate-500 text-[10px] font-bold uppercase tracking-wider ml-auto">{email.timestamp}</span>
-                </div>
-
-                <h4 className={`font-bold text-lg tracking-tight mb-2 ${getTitleColor(email.urgency_level)}`}>{email.subject}</h4>
-
-                <div className="flex flex-wrap items-center gap-3 mb-3">
-                  <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">
-                    FROM: <span className="text-slate-200 normal-case tracking-normal ml-1">{email.sender}</span>
-                  </p>
-                  {email.phone && (
-                    <a 
-                      href={`tel:${email.phone}`}
-                      className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 text-green-400 px-2.5 py-1 rounded-lg text-xs font-bold hover:bg-green-500 hover:text-white transition-all"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <Phone size={12} /> {email.phone}
-                    </a>
-                  )}
-                </div>
-
-                {email.vehicles && email.vehicles.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mb-3">
-                    {email.vehicles.map((vehicle: any, idx: number) => (
-                      <span key={idx} className="flex items-center gap-2 bg-slate-900/50 border border-slate-700 text-slate-300 px-2.5 py-1 rounded-lg text-xs font-bold">
-                        <Wrench size={12} className="text-blue-400" />
-                        {vehicle.year} {vehicle.make} {vehicle.model}
+        {loading && emails.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 text-slate-500 gap-4">
+            <div className="relative w-12 h-12">
+              <div className="absolute inset-0 border-4 border-blue-500/20 rounded-full" />
+              <div className="absolute inset-0 border-4 border-blue-500 rounded-full border-t-transparent animate-spin" />
+            </div>
+            <p className="text-[10px] font-black uppercase tracking-[0.3em] animate-pulse">Loading...</p>
+          </div>
+        ) : filteredEmails.length > 0 ? (
+          <>
+            {/* QUICK SUMMARY BLOCK */}
+            <div className="bg-slate-950/60 border border-slate-700 rounded-2xl p-5 mb-6">
+              <div className="flex items-center gap-3 mb-4">
+                <List size={20} className="text-blue-400" />
+                <h4 className="text-sm font-black text-white uppercase tracking-wider">Quick Summary - {selectedTab}</h4>
+              </div>
+              <div className="space-y-2">
+                {filteredEmails.map((email) => (
+                  <div key={email.id} className="flex items-start gap-3 text-sm">
+                    <span className={`mt-1 font-black ${getBulletColor(email.urgency_level)}`}>•</span>
+                    <div className="flex-1">
+                      <span className={`font-bold ${getTitleColor(email.urgency_level)}`}>
+                        {email.urgency_level.toUpperCase()}: {email.subject}
                       </span>
-                    ))}
-                  </div>
-                )}
-
-                <p className="text-slate-400 text-sm leading-relaxed font-medium mb-3 bg-slate-900/30 p-3 rounded-xl border border-slate-800/30">
-                  {email.summary}
-                </p>
-
-                {email.action_items && email.action_items.length > 0 && (
-                  <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-3">
-                    <p className="text-[9px] font-black uppercase tracking-wider text-slate-500 mb-2">ACTION ITEMS:</p>
-                    <div className="space-y-1.5">
-                      {email.action_items.map((item: string, idx: number) => (
-                        <div key={idx} className="flex items-start gap-2 text-sm text-slate-300">
-                          <Square size={14} className="text-slate-600 mt-0.5 flex-shrink-0" />
-                          <span className="font-medium">{item}</span>
-                        </div>
-                      ))}
+                      <span className="text-slate-400"> - {email.sender}</span>
+                      {email.phone && (
+                        <a 
+                          href={`tel:${email.phone}`}
+                          className="text-green-400 hover:text-green-300 ml-2"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          ({email.phone})
+                        </a>
+                      )}
                     </div>
                   </div>
-                )}
+                ))}
               </div>
-            ))
-          ) : (
-            <div className="text-center py-16 opacity-20">
-               <Mail size={48} className="mx-auto mb-3" />
-               <p className="text-xs font-black uppercase tracking-[0.3em]">No Emails in {selectedTab}</p>
             </div>
-          )}
-        </div>
+
+            {/* DETAILED CARDS */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Detailed View</h4>
+              {filteredEmails.map((email) => (
+                <div 
+                  key={email.id} 
+                  className={`group relative rounded-2xl p-4 border transition-all duration-300 hover:shadow-xl cursor-pointer ${getCardBorderColor(email.urgency_level)}`}
+                >
+                  <div className="flex flex-wrap items-center gap-2 mb-3">
+                    <span className={`text-[9px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider border ${getUrgencyBadgeColor(email.urgency_level)}`}>
+                      {email.urgency_level.toUpperCase()} PRIORITY
+                    </span>
+                    <span className={`text-[9px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider border ${getRequestTypeColor(email.request_type)}`}>
+                      {email.request_type.toUpperCase()}
+                    </span>
+                    <span className="text-slate-500 text-[10px] font-bold uppercase tracking-wider ml-auto">{email.timestamp}</span>
+                  </div>
+
+                  <h4 className={`font-bold text-lg tracking-tight mb-2 ${getTitleColor(email.urgency_level)}`}>{email.subject}</h4>
+
+                  <div className="flex flex-wrap items-center gap-3 mb-3">
+                    <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+                      FROM: <span className="text-slate-200 normal-case tracking-normal ml-1">{email.sender}</span>
+                    </p>
+                    {email.phone && (
+                      <a 
+                        href={`tel:${email.phone}`}
+                        className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 text-green-400 px-2.5 py-1 rounded-lg text-xs font-bold hover:bg-green-500 hover:text-white transition-all"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Phone size={12} /> {email.phone}
+                      </a>
+                    )}
+                  </div>
+
+                  {email.vehicles && email.vehicles.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {email.vehicles.map((vehicle: any, idx: number) => (
+                        <span key={idx} className="flex items-center gap-2 bg-slate-900/50 border border-slate-700 text-slate-300 px-2.5 py-1 rounded-lg text-xs font-bold">
+                          <Wrench size={12} className="text-blue-400" />
+                          {vehicle.year} {vehicle.make} {vehicle.model}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  <p className="text-slate-400 text-sm leading-relaxed font-medium mb-3 bg-slate-900/30 p-3 rounded-xl border border-slate-800/30">
+                    {email.summary}
+                  </p>
+
+                  {email.action_items && email.action_items.length > 0 && (
+                    <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-3">
+                      <p className="text-[9px] font-black uppercase tracking-wider text-slate-500 mb-2">ACTION ITEMS:</p>
+                      <div className="space-y-1.5">
+                        {email.action_items.map((item: string, idx: number) => (
+                          <div key={idx} className="flex items-start gap-2 text-sm text-slate-300">
+                            <Square size={14} className="text-slate-600 mt-0.5 flex-shrink-0" />
+                            <span className="font-medium">{item}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <div className="text-center py-16 opacity-20">
+            <Mail size={48} className="mx-auto mb-3" />
+            <p className="text-xs font-black uppercase tracking-[0.3em]">No Emails in {selectedTab}</p>
+          </div>
+        )}
       </div>
     </div>
   );
