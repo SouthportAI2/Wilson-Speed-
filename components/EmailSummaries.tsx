@@ -132,17 +132,27 @@ const EmailSummaries: React.FC = () => {
   };
 
   const cleanSummary = (summary: string) => {
-    if (!summary) return '';
-    // Remove =HIGH:, =MEDIUM:, =LOW: or HIGH:, MEDIUM:, LOW: from start
-    let cleaned = summary.replace(/^=HIGH:\s*/gi, '')
-                        .replace(/^=MEDIUM:\s*/gi, '')
-                        .replace(/^=LOW:\s*/gi, '')
-                        .replace(/^HIGH:\s*/gi, '')
-                        .replace(/^MEDIUM:\s*/gi, '')
-                        .replace(/^LOW:\s*/gi, '')
-                        .trim();
-    return cleaned;
-  };
+  if (!summary) return '';
+  
+  // Remove urgency prefixes one by one
+  let result = summary.trim();
+  
+  if (result.startsWith('=HIGH:')) {
+    result = result.substring(6).trim();
+  } else if (result.startsWith('=MEDIUM:')) {
+    result = result.substring(8).trim();
+  } else if (result.startsWith('=LOW:')) {
+    result = result.substring(5).trim();
+  } else if (result.startsWith('HIGH:')) {
+    result = result.substring(5).trim();
+  } else if (result.startsWith('MEDIUM:')) {
+    result = result.substring(7).trim();
+  } else if (result.startsWith('LOW:')) {
+    result = result.substring(4).trim();
+  }
+  
+  return result;
+};
 
   const getQuickSummary = (email: any) => {
     const vehicleText = email.vehicles && email.vehicles.length > 0 
