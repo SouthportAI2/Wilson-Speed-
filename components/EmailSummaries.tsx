@@ -131,23 +131,14 @@ const EmailSummaries: React.FC = () => {
     }
   };
 
-  const getUrgencyBadgeColor = (level: string) => {
-    switch (level) {
-      case 'high': return 'bg-red-500/10 border-red-500/30 text-red-400';
-      case 'medium': return 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400';
-      case 'low': return 'bg-slate-500/10 border-slate-500/30 text-slate-400';
-      default: return 'bg-slate-800 border-slate-700 text-slate-400';
-    }
-  };
-
-  const getRequestTypeColor = (type: string) => {
-    switch (type) {
-      case 'repair': return 'bg-red-500/10 border-red-500/20 text-red-400';
-      case 'parts': return 'bg-orange-500/10 border-orange-500/20 text-orange-400';
-      case 'quote': return 'bg-purple-500/10 border-purple-500/20 text-purple-400';
-      case 'appointment': return 'bg-green-500/10 border-green-500/20 text-green-400';
-      default: return 'bg-blue-500/10 border-blue-500/20 text-blue-400';
-    }
+  const getQuickSummary = (email: any) => {
+    const vehicleText = email.vehicles && email.vehicles.length > 0 
+      ? `${email.vehicles[0].year} ${email.vehicles[0].make} ${email.vehicles[0].model}` 
+      : '';
+    
+    const phoneText = email.phone ? ` - ${email.phone}` : '';
+    
+    return `${vehicleText ? vehicleText + ' - ' : ''}${email.summary.substring(0, 80)}... ${email.sender}${phoneText}`;
   };
 
   const tabs = ['TODAY', 'YESTERDAY', 'LAST WEEK', 'OLDER'];
@@ -226,24 +217,17 @@ const EmailSummaries: React.FC = () => {
                 <List size={20} className="text-blue-400" />
                 <h4 className="text-sm font-black text-white uppercase tracking-wider">Quick Summary - {selectedTab}</h4>
               </div>
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {filteredEmails.map((email) => (
-                  <div key={email.id} className="flex items-start gap-3 text-sm">
+                  <div key={email.id} className="flex items-start gap-3">
                     <span className={`mt-1 font-black ${getBulletColor(email.urgency_level)}`}>•</span>
                     <div className="flex-1">
-                      <span className={`font-bold ${getTitleColor(email.urgency_level)}`}>
-                        {email.urgency_level.toUpperCase()}: {email.subject}
-                      </span>
-                      <span className="text-slate-400"> - {email.sender}</span>
-                      {email.phone && (
-                        <a 
-                          href={`tel:${email.phone}`}
-                          className="text-green-400 hover:text-green-300 ml-2"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          ({email.phone})
-                        </a>
-                      )}
+                      <p className="text-sm">
+                        <span className={`font-bold ${getTitleColor(email.urgency_level)}`}>
+                          {email.urgency_level.toUpperCase()}:
+                        </span>
+                        <span className="text-slate-300"> {getQuickSummary(email)}</span>
+                      </p>
                     </div>
                   </div>
                 ))}
@@ -259,10 +243,10 @@ const EmailSummaries: React.FC = () => {
                   className={`group relative rounded-2xl p-4 border transition-all duration-300 hover:shadow-xl cursor-pointer ${getCardBorderColor(email.urgency_level)}`}
                 >
                   <div className="flex flex-wrap items-center gap-2 mb-3">
-                    <span className={`text-[9px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider border ${getUrgencyBadgeColor(email.urgency_level)}`}>
+                    <span className={`text-[9px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider ${email.urgency_level === 'high' ? 'bg-red-500/20 text-red-400' : email.urgency_level === 'medium' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-slate-500/20 text-slate-400'}`}>
                       {email.urgency_level.toUpperCase()} PRIORITY
                     </span>
-                    <span className={`text-[9px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider border ${getRequestTypeColor(email.request_type)}`}>
+                    <span className={`text-[9px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider ${email.request_type === 'repair' ? 'bg-red-500/20 text-red-400' : email.request_type === 'parts' ? 'bg-orange-500/20 text-orange-400' : 'bg-blue-500/20 text-blue-400'}`}>
                       {email.request_type.toUpperCase()}
                     </span>
                     <span className="text-slate-500 text-[10px] font-bold uppercase tracking-wider ml-auto">{email.timestamp}</span>
