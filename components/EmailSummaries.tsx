@@ -74,26 +74,22 @@ const EmailSummaries: React.FC = () => {
         };
       });
       
-      // Remove duplicates by gmail_id - keep only the most recent entry
-      // BUT only deduplicate if gmail_id exists
-      const uniqueEmails = transformed.reduce((acc, email) => {
-        // If no gmail_id, keep the email (don't try to deduplicate)
-        if (!email.gmail_id) {
-          acc.push(email);
-          return acc;
+      // FIX: Robust deduplication based on sender, subject, and timestamp (within 1 minute)
+      const uniqueEmails: any[] = [];
+      transformed.forEach((email) => {
+        const duplicateIndex = uniqueEmails.findIndex(existing => 
+          existing.sender_email === email.sender_email &&
+          existing.subject === email.subject &&
+          Math.abs(existing.received_at.getTime() - email.received_at.getTime()) < 60000
+        );
+
+        if (duplicateIndex === -1) {
+          uniqueEmails.push(email);
+        } else if (email.received_at > uniqueEmails[duplicateIndex].received_at) {
+          // Keep the newer entry if multiple instances of the same email exist
+          uniqueEmails[duplicateIndex] = email;
         }
-        
-        // If gmail_id exists, check for duplicates
-        const existing = acc.find(e => e.gmail_id === email.gmail_id);
-        if (!existing) {
-          acc.push(email);
-        } else if (email.received_at > existing.received_at) {
-          // Replace with newer version if duplicate found
-          const index = acc.indexOf(existing);
-          acc[index] = email;
-        }
-        return acc;
-      }, [] as any[]);
+      });
       
       const priorityOrder = { high: 0, medium: 1, low: 2 };
       const sorted = uniqueEmails.sort((a, b) => {
@@ -121,18 +117,23 @@ const EmailSummaries: React.FC = () => {
   }, [fetchEmails]);
 
   const getDateGroup = (date: Date) => {
+    // FIX: Normalizing date comparison to local midnight to ensure tabs work correctly across timezones
     const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-    const weekAgo = new Date(today);
-    weekAgo.setDate(weekAgo.getDate() - 7);
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
     
-    const emailDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const yesterdayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterdayStart = yesterdayDate.getTime();
     
-    if (emailDate.getTime() === today.getTime()) return 'TODAY';
-    if (emailDate.getTime() === yesterday.getTime()) return 'YESTERDAY';
-    if (emailDate >= weekAgo) return 'LAST WEEK';
+    const lastWeekDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    lastWeekDate.setDate(lastWeekDate.getDate() - 7);
+    const lastWeekStart = lastWeekDate.getTime();
+    
+    const emailStart = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+    
+    if (emailStart === todayStart) return 'TODAY';
+    if (emailStart === yesterdayStart) return 'YESTERDAY';
+    if (emailStart >= lastWeekStart) return 'LAST WEEK';
     return 'OLDER';
   };
 
