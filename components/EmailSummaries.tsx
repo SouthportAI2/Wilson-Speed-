@@ -117,23 +117,18 @@ const EmailSummaries: React.FC = () => {
   }, [fetchEmails]);
 
   const getDateGroup = (date: Date) => {
-    // FIX: Normalizing date comparison to local midnight to ensure tabs work correctly across timezones
     const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     
-    const yesterdayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-    const yesterdayStart = yesterdayDate.getTime();
+    const emailDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
     
-    const lastWeekDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    lastWeekDate.setDate(lastWeekDate.getDate() - 7);
-    const lastWeekStart = lastWeekDate.getTime();
+    // Calculate difference in days
+    const diffTime = today.getTime() - emailDate.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
     
-    const emailStart = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
-    
-    if (emailStart === todayStart) return 'TODAY';
-    if (emailStart === yesterdayStart) return 'YESTERDAY';
-    if (emailStart >= lastWeekStart) return 'LAST WEEK';
+    if (diffDays === 0) return 'TODAY';
+    if (diffDays === 1) return 'YESTERDAY';
+    if (diffDays >= 2 && diffDays <= 7) return 'LAST WEEK';
     return 'OLDER';
   };
 
