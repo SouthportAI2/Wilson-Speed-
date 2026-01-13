@@ -75,7 +75,15 @@ const EmailSummaries: React.FC = () => {
       });
       
       // Remove duplicates by gmail_id - keep only the most recent entry
+      // BUT only deduplicate if gmail_id exists
       const uniqueEmails = transformed.reduce((acc, email) => {
+        // If no gmail_id, keep the email (don't try to deduplicate)
+        if (!email.gmail_id) {
+          acc.push(email);
+          return acc;
+        }
+        
+        // If gmail_id exists, check for duplicates
         const existing = acc.find(e => e.gmail_id === email.gmail_id);
         if (!existing) {
           acc.push(email);
