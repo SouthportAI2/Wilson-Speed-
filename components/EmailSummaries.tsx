@@ -334,19 +334,7 @@ const EmailSummaries: React.FC = () => {
                     {cleanSummary(email.summary)}
                   </p>
 
-                  {email.action_items && email.action_items.length > 0 && (
-                    <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-3">
-                      <p className="text-[9px] font-black uppercase tracking-wider text-slate-500 mb-2">ACTION ITEMS:</p>
-                      <div className="space-y-1.5">
-                        {email.action_items.map((item: string, idx: number) => (
-                          <div key={idx} className="flex items-start gap-2 text-sm text-slate-300">
-                            <Square size={14} className="text-slate-600 mt-0.5 flex-shrink-0" />
-                            <span className="font-medium">{item}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+            
                 </div>
               ))}
             </div>
