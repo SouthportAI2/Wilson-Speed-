@@ -116,8 +116,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
           <div className="w-12 h-12 rounded-2xl border-2 border-slate-950 bg-blue-600 flex items-center justify-center text-xs font-bold text-white shadow-xl">AI</div>
         </div>
         <div className="flex flex-col gap-1 text-left">
-          <div className="text-sm text-slate-300 font-bold tracking-tight">System Core v2.1.0</div>
-          <div className="text-xs text-slate-500 font-medium italic underline underline-offset-4 decoration-slate-800">Operational Heartbeat Verified</div>
+          <div className="text-sm text-slate-300 font-bold tracking-tight">Custom built Software by Southport AI Solutions</div>
+          <div className="text-xs text-slate-500 font-medium italic underline underline-offset-4 decoration-slate-800">Copyright © 2026</div>
         </div>
       </div>
     </div>
