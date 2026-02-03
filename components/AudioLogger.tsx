@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Search, RefreshCw, Clock, HardDrive, Mic } from 'lucide-react';
+import { Search, RefreshCw, Clock, HardDrive } from 'lucide-react';
 import { getSupabaseClient } from '../services/supabaseClient';
 import { AudioLog } from '../types';
 
@@ -26,7 +26,6 @@ const AudioLogger: React.FC = () => {
 
   const [isRecording, setIsRecording] = useState(false);
   const [duration, setDuration] = useState(0);
-  const [recordingStatus, setRecordingStatus] = useState<'ready' | 'recording' | 'processing'>('ready');
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -143,8 +142,6 @@ const AudioLogger: React.FC = () => {
   }, [isRecording]);
 
   const uploadAndProcess = async (audioBlob: Blob, recordingDuration: number) => {
-    setRecordingStatus('processing');
-    
     const configData = JSON.parse(localStorage.getItem(CONFIG_KEY) || '{}');
     const supabase = getSupabaseClient();
     const timestamp = new Date().toLocaleString();
@@ -202,8 +199,6 @@ const AudioLogger: React.FC = () => {
     } catch (error) {
       console.error('Upload failed:', error);
       alert('Failed to upload recording. Please check your configuration.');
-    } finally {
-      setRecordingStatus('ready');
     }
   };
 
@@ -261,7 +256,6 @@ const AudioLogger: React.FC = () => {
       recordingStartTimeRef.current = Date.now();
       silenceStartRef.current = null;
       setIsRecording(true);
-      setRecordingStatus('recording');
       setDuration(0);
 
       // Start duration timer
@@ -275,7 +269,6 @@ const AudioLogger: React.FC = () => {
     } catch (err) {
       console.error('Microphone error:', err);
       alert('Microphone access denied. Please enable microphone permissions in your browser settings.');
-      setRecordingStatus('ready');
     }
   }, [detectSilence, uploadAndProcess]);
 
@@ -357,60 +350,39 @@ const AudioLogger: React.FC = () => {
   return (
     <div className="flex flex-col gap-6 h-[calc(100vh-140px)] animate-in fade-in slide-in-from-bottom-4 duration-500">
       
-      {/* HEADER WITH RECORD BUTTON */}
+      {/* HEADER WITH SEARCH */}
       <div className="bg-slate-900/40 backdrop-blur-md border border-slate-800 rounded-3xl p-8 shadow-2xl overflow-hidden relative">
         <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/5 blur-[100px] -mr-32 -mt-32" />
-        
-        <div className="flex justify-between items-start mb-6 relative z-10">
-          <div>
-            <h3 className="text-2xl font-bold text-white tracking-tight">Audio Logger</h3>
-            <p className="text-slate-400 text-sm mt-1">Click record to capture customer conversations</p>
-          </div>
+        <div className="flex justify-between items-center mb-6 relative z-10">
+          <h3 className="text-2xl font-bold text-white tracking-tight">Audio Logger</h3>
           
-          <button onClick={fetchLogs} className="p-3 text-slate-400 hover:text-white transition-all active:scale-95">
-            <RefreshCw size={20} className={isSyncing ? 'animate-spin' : ''} />
-          </button>
-        </div>
-
-        {/* BIG RECORD BUTTON */}
-        <div className="relative z-10 mb-6">
-          <button
-            onClick={handleToggleRecording}
-            disabled={recordingStatus === 'processing'}
-            className={`w-full p-8 rounded-2xl border-2 transition-all duration-300 ${
-              isRecording 
-                ? 'bg-red-600 border-red-500 hover:bg-red-500' 
-                : recordingStatus === 'processing'
-                ? 'bg-slate-800 border-slate-700 cursor-not-allowed opacity-50'
-                : 'bg-blue-600 border-blue-500 hover:bg-blue-500 active:scale-98'
-            }`}
-          >
-            <div className="flex items-center justify-center gap-4">
-              <div className={`p-4 rounded-full ${isRecording ? 'bg-red-800' : 'bg-blue-800'}`}>
-                <Mic size={32} className="text-white" />
-              </div>
-              <div className="text-left">
-                <div className="text-2xl font-bold text-white">
-                  {isRecording ? 'RECORDING...' : recordingStatus === 'processing' ? 'PROCESSING...' : 'START RECORDING'}
-                </div>
-                {isRecording && (
-                  <div className="text-slate-200 text-sm mt-1">
-                    Duration: {formatTime(duration)} • Auto-stops after 10s silence or 5 min
-                  </div>
-                )}
-                {recordingStatus === 'processing' && (
-                  <div className="text-slate-200 text-sm mt-1">
-                    Transcribing and analyzing conversation...
-                  </div>
-                )}
-                {recordingStatus === 'ready' && (
-                  <div className="text-slate-200 text-sm mt-1">
-                    Press to start capturing customer conversation
-                  </div>
-                )}
-              </div>
+          <div className="flex items-center gap-3">
+            {/* RECORDING TOGGLE */}
+            <div className="flex items-center gap-3 bg-slate-950/50 px-5 py-3 rounded-2xl border border-slate-800/50">
+              <span className={`text-xs font-bold uppercase tracking-widest transition-colors ${isRecording ? 'text-blue-400' : 'text-slate-500'}`}>
+                Record Customer
+              </span>
+              <button 
+                onClick={handleToggleRecording}
+                className={`relative w-12 h-6 transition-colors rounded-full focus:outline-none ${isRecording ? 'bg-blue-600' : 'bg-slate-700'}`}
+              >
+                <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${isRecording ? 'translate-x-6' : 'translate-x-0'}`} />
+              </button>
             </div>
-          </button>
+            
+            {/* DURATION DISPLAY (when recording) */}
+            {isRecording && (
+              <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 px-4 py-2 rounded-xl">
+                <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                <span className="text-red-400 text-xs font-bold">{formatTime(duration)}</span>
+              </div>
+            )}
+            
+            {/* REFRESH BUTTON */}
+            <button onClick={fetchLogs} className="p-3 text-slate-400 hover:text-white transition-all active:scale-95">
+              <RefreshCw size={20} className={isSyncing ? 'animate-spin' : ''} />
+            </button>
+          </div>
         </div>
         
         {/* SEARCH BAR */}
