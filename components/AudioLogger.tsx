@@ -167,7 +167,7 @@ const AudioLogger: React.FC = () => {
       if (supabase) {
         const fileName = `${tempId}.webm`;
         const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('audio-recordings')
+          .from('audio-files')
           .upload(fileName, audioBlob, {
             contentType: 'audio/webm',
             cacheControl: '3600',
@@ -176,7 +176,7 @@ const AudioLogger: React.FC = () => {
         if (uploadError) throw uploadError;
 
         const { data: { publicUrl } } = supabase.storage
-          .from('audio-recordings')
+          .from('audio-files')
           .getPublicUrl(fileName);
 
         // Trigger n8n webhook
