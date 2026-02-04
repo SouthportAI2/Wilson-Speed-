@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Search, RefreshCw, Clock, HardDrive } from 'lucide-react';
+import { Search, RefreshCw, Clock, HardDrive, ChevronDown, ChevronUp, Trash2, AlertCircle, CheckCircle } from 'lucide-react';
 import { getSupabaseClient } from '../services/supabaseClient';
 import { AudioLog } from '../types';
 
 const CONFIG_KEY = 'southport_config';
 const LOCAL_LOGS_KEY = 'southport_audio_cache_v3';
-const SILENCE_THRESHOLD = 10; // Volume threshold for silence detection
-const SILENCE_DURATION = 10000; // 10 seconds of silence
+const SILENCE_THRESHOLD = 10;
+const SILENCE_DURATION = 10000; // 10 seconds
 const MAX_RECORDING_DURATION = 300000; // 5 minutes
 
 const formatTime = (seconds: number): string => {
@@ -14,6 +14,14 @@ const formatTime = (seconds: number): string => {
   const secs = seconds % 60;
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 };
+
+interface RetryQueueItem {
+  id: string;
+  audioData: string;
+  metadata: any;
+  attempts: number;
+  timestamp: number;
+}
 
 const AudioLogger: React.FC = () => {
   const [logs, setLogs] = useState<AudioLog[]>([]);
@@ -26,6 +34,9 @@ const AudioLogger: React.FC = () => {
 
   const [isRecording, setIsRecording] = useState(false);
   const [duration, setDuration] = useState(0);
+  const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
+  const [retryQueue, setRetryQueue] = useState<RetryQueueItem[]>([]);
+  const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set());
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -37,6 +48,49 @@ const AudioLogger: React.FC = () => {
   const recordingStartTimeRef = useRef<number | null>(null);
 
   const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+
+  const toggleExpand = (logId: string) => {
+    setExpandedLogs(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(logId)) {
+        newSet.delete(logId);
+      } else {
+        newSet.add(logId);
+      }
+      return newSet;
+    });
+  };
+
+  const deleteLog = async (logId: string) => {
+    if (!confirm('Delete this conversation? This cannot be undone.')) {
+      return;
+    }
+
+    const supabase = getSupabaseClient();
+    
+    // Remove from UI immediately
+    setLogs(prev => prev.filter(log => log.id !== logId));
+    
+    // Remove from cloud if it exists there
+    if (supabase && !logId.startsWith('audio-')) {
+      try {
+        await supabase
+          .from('audio_logs')
+          .delete()
+          .eq('id', logId);
+      } catch (err) {
+        console.error('Failed to delete from cloud:', err);
+      }
+    }
+    
+    // Remove from local cache
+    const localData = localStorage.getItem(LOCAL_LOGS_KEY);
+    if (localData) {
+      const cachedLogs: AudioLog[] = JSON.parse(localData);
+      const filtered = cachedLogs.filter(log => log.id !== logId);
+      localStorage.setItem(LOCAL_LOGS_KEY, JSON.stringify(filtered));
+    }
+  };
 
   const fetchLogs = useCallback(async () => {
     setIsSyncing(true);
@@ -53,18 +107,14 @@ const AudioLogger: React.FC = () => {
 
         if (!error && data) {
           cloudLogs = data.map(item => {
-            const customers = item.customers || [];
-            const customerNames = customers.map((c: any) => c.name).filter(Boolean);
-            const displayName = customerNames.length > 0 ? customerNames.join(', ') : 'Customer';
-            const firstVehicle = customers[0]?.vehicle || '';
-            
             return {
               id: item.id.toString(),
               timestamp: new Date(item.created_at).toLocaleString(),
-              customerName: displayName,
-              vehicle: firstVehicle,
+              customerName: item.customer_name || 'Customer',
+              vehicle: item.vehicle || '',
               duration: item.duration || 'N/A',
-              transcriptPreview: item.summary_bullet || item.transcript || 'Processing...',
+              transcriptPreview: item.summary_bullet || 'Processing...',
+              fullTranscript: item.transcript || '',
               tags: item.tags || ['CLOUD'],
             };
           });
@@ -99,6 +149,23 @@ const AudioLogger: React.FC = () => {
     }
   }, []);
 
+  const saveToRetryQueue = (audioBlob: Blob, metadata: any) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(audioBlob);
+    reader.onloadend = () => {
+      const queue = JSON.parse(localStorage.getItem('upload_retry_queue') || '[]');
+      queue.push({
+        id: metadata.id,
+        audioData: reader.result as string,
+        metadata: metadata,
+        attempts: 0,
+        timestamp: Date.now()
+      });
+      localStorage.setItem('upload_retry_queue', JSON.stringify(queue));
+      setRetryQueue(queue);
+    };
+  };
+
   const detectSilence = useCallback(() => {
     if (!analyserRef.current) return;
 
@@ -112,12 +179,10 @@ const AudioLogger: React.FC = () => {
       analyser.getByteFrequencyData(dataArray);
       const volume = dataArray.reduce((a, b) => a + b) / bufferLength;
       
-      // Check for silence
       if (volume < SILENCE_THRESHOLD) {
         if (!silenceStartRef.current) {
           silenceStartRef.current = Date.now();
         } else if (Date.now() - silenceStartRef.current > SILENCE_DURATION) {
-          // 10 seconds of silence detected - stop recording
           console.log('Silence detected - auto-stopping');
           stopRecording();
           return;
@@ -126,7 +191,6 @@ const AudioLogger: React.FC = () => {
         silenceStartRef.current = null;
       }
 
-      // Check max duration
       if (recordingStartTimeRef.current && Date.now() - recordingStartTimeRef.current > MAX_RECORDING_DURATION) {
         console.log('Max duration reached - auto-stopping');
         stopRecording();
@@ -147,7 +211,12 @@ const AudioLogger: React.FC = () => {
     const timestamp = new Date().toLocaleString();
     const tempId = `audio-${Date.now()}`;
     
-    // Create temporary local log
+    const metadata = {
+      id: tempId,
+      timestamp: timestamp,
+      duration: Math.floor(recordingDuration / 1000),
+    };
+    
     const newLog: AudioLog = {
       id: tempId,
       timestamp: timestamp,
@@ -155,6 +224,7 @@ const AudioLogger: React.FC = () => {
       vehicle: '',
       duration: formatTime(Math.floor(recordingDuration / 1000)),
       transcriptPreview: 'Transcribing and analyzing conversation...',
+      fullTranscript: '',
       tags: ['LOCAL', 'PROCESSING'],
     };
 
@@ -162,8 +232,12 @@ const AudioLogger: React.FC = () => {
     localStorage.setItem(LOCAL_LOGS_KEY, JSON.stringify([newLog, ...existingCache]));
     setLogs(prev => [newLog, ...prev]);
 
+    setUploadStatus('uploading');
+    
+    let uploadSuccess = false;
+    let audioUrl = '';
+    
     try {
-      // Upload to Supabase Storage
       if (supabase) {
         const fileName = `${tempId}.webm`;
         const { data: uploadData, error: uploadError } = await supabase.storage
@@ -173,38 +247,76 @@ const AudioLogger: React.FC = () => {
             cacheControl: '3600',
           });
 
-        if (uploadError) throw uploadError;
-
-        const { data: { publicUrl } } = supabase.storage
-          .from('audio-files')
-          .getPublicUrl(fileName);
-
-        // Trigger n8n webhook
-        if (configData.n8nWebhookAudio) {
+        if (!uploadError) {
+          const { data: { publicUrl } } = supabase.storage
+            .from('audio-files')
+            .getPublicUrl(fileName);
+          
+          audioUrl = publicUrl;
+          uploadSuccess = true;
+        } else {
+          console.error('Supabase upload error:', uploadError);
+        }
+      }
+    } catch (err) {
+      console.warn('Supabase upload failed:', err);
+    }
+    
+    if (!uploadSuccess && configData.n8nWebhookAudio) {
+      try {
+        const formData = new FormData();
+        formData.append('file', audioBlob, `${tempId}.webm`);
+        formData.append('metadata', JSON.stringify(metadata));
+        
+        const response = await fetch(configData.n8nWebhookAudio, {
+          method: 'POST',
+          body: formData
+        });
+        
+        if (response.ok) {
+          uploadSuccess = true;
+          console.log('Fallback n8n upload succeeded');
+        }
+      } catch (err) {
+        console.error('n8n fallback upload failed:', err);
+      }
+    }
+    
+    if (uploadSuccess) {
+      setUploadStatus('success');
+      
+      if (audioUrl && configData.n8nWebhookAudio) {
+        try {
           await fetch(configData.n8nWebhookAudio, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               id: tempId,
               timestamp: timestamp,
-              audio_url: publicUrl,
+              audio_url: audioUrl,
               duration: Math.floor(recordingDuration / 1000),
             }),
           });
-
-          // Refresh logs after 5 seconds to get processed results
-          setTimeout(() => fetchLogs(), 5000);
+        } catch (err) {
+          console.error('Webhook trigger failed:', err);
         }
       }
-    } catch (error) {
-      console.error('Upload failed:', error);
-      alert('Failed to upload recording. Please check your configuration.');
+      
+      setTimeout(() => {
+        fetchLogs();
+        setUploadStatus('idle');
+      }, 5000);
+      
+    } else {
+      setUploadStatus('error');
+      saveToRetryQueue(audioBlob, metadata);
+      console.error('All upload methods failed - added to retry queue');
+      setTimeout(() => setUploadStatus('idle'), 5000);
     }
   };
 
   const startRecording = useCallback(async () => {
     try {
-      // Request microphone access
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
           echoCancellation: true,
@@ -215,7 +327,6 @@ const AudioLogger: React.FC = () => {
       
       streamRef.current = stream;
 
-      // Set up Web Audio API for silence detection
       const audioContext = new AudioContext();
       const analyser = audioContext.createAnalyser();
       const microphone = audioContext.createMediaStreamSource(stream);
@@ -225,7 +336,6 @@ const AudioLogger: React.FC = () => {
       audioContextRef.current = audioContext;
       analyserRef.current = analyser;
 
-      // Set up MediaRecorder
       const recorder = new MediaRecorder(stream);
       mediaRecorderRef.current = recorder;
       chunksRef.current = [];
@@ -241,7 +351,6 @@ const AudioLogger: React.FC = () => {
         const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
         await uploadAndProcess(blob, recordingDuration);
         
-        // Clean up
         if (streamRef.current) {
           streamRef.current.getTracks().forEach(track => track.stop());
           streamRef.current = null;
@@ -258,12 +367,10 @@ const AudioLogger: React.FC = () => {
       setIsRecording(true);
       setDuration(0);
 
-      // Start duration timer
       durationTimerRef.current = window.setInterval(() => {
         setDuration(prev => prev + 1);
       }, 1000);
 
-      // Start silence detection
       detectSilence();
 
     } catch (err) {
@@ -297,7 +404,60 @@ const AudioLogger: React.FC = () => {
   };
 
   useEffect(() => {
+    const retryFailedUploads = async () => {
+      const queueData = localStorage.getItem('upload_retry_queue');
+      if (!queueData) return;
+      
+      const queue: RetryQueueItem[] = JSON.parse(queueData);
+      const configData = JSON.parse(localStorage.getItem(CONFIG_KEY) || '{}');
+      
+      if (!configData.n8nWebhookAudio) return;
+      
+      for (let i = 0; i < queue.length; i++) {
+        const item = queue[i];
+        
+        if (item.attempts >= 3) {
+          console.log(`Max retry attempts reached for ${item.id}`);
+          continue;
+        }
+        
+        try {
+          const response = await fetch(item.audioData);
+          const blob = await response.blob();
+          
+          const formData = new FormData();
+          formData.append('file', blob, `${item.id}.webm`);
+          formData.append('metadata', JSON.stringify(item.metadata));
+          
+          const uploadResponse = await fetch(configData.n8nWebhookAudio, {
+            method: 'POST',
+            body: formData
+          });
+          
+          if (uploadResponse.ok) {
+            console.log(`Retry successful for ${item.id}`);
+            queue.splice(i, 1);
+            i--;
+            localStorage.setItem('upload_retry_queue', JSON.stringify(queue));
+            setRetryQueue(queue);
+            setTimeout(() => fetchLogs(), 2000);
+          } else {
+            throw new Error('Upload failed');
+          }
+        } catch (error) {
+          console.log(`Retry attempt ${item.attempts + 1} failed for ${item.id}`);
+          queue[i].attempts++;
+          localStorage.setItem('upload_retry_queue', JSON.stringify(queue));
+          setRetryQueue(queue);
+        }
+      }
+    };
+    
+    retryFailedUploads();
+    const retryInterval = setInterval(retryFailedUploads, 120000);
+    
     return () => {
+      clearInterval(retryInterval);
       if (durationTimerRef.current) clearInterval(durationTimerRef.current);
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
@@ -306,11 +466,29 @@ const AudioLogger: React.FC = () => {
         audioContextRef.current.close();
       }
     };
-  }, []);
+  }, [fetchLogs]);
 
   useEffect(() => {
     fetchLogs();
+    
+    const queueData = localStorage.getItem('upload_retry_queue');
+    if (queueData) {
+      setRetryQueue(JSON.parse(queueData));
+    }
   }, [fetchLogs]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isRecording) {
+        e.preventDefault();
+        e.returnValue = 'Recording in progress! Close anyway?';
+        return e.returnValue;
+      }
+    };
+    
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isRecording]);
 
   const getCurrentWeekStart = () => {
     const now = new Date();
@@ -334,6 +512,7 @@ const AudioLogger: React.FC = () => {
           log.customerName,
           log.vehicle,
           log.transcriptPreview,
+          log.fullTranscript,
           ...(log.tags || [])
         ].join(' ').toLowerCase();
         return searchableText.includes(query);
@@ -350,9 +529,10 @@ const AudioLogger: React.FC = () => {
   return (
     <div className="flex flex-col gap-6 h-[calc(100vh-140px)] animate-in fade-in slide-in-from-bottom-4 duration-500">
       
-      {/* HEADER WITH SEARCH */}
+      {/* HEADER */}
       <div className="bg-slate-900/40 backdrop-blur-md border border-slate-800 rounded-3xl p-8 shadow-2xl overflow-hidden relative">
         <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/5 blur-[100px] -mr-32 -mt-32" />
+        
         <div className="flex justify-between items-center mb-6 relative z-10">
           <h3 className="text-2xl font-bold text-white tracking-tight">Audio Logger</h3>
           
@@ -370,7 +550,7 @@ const AudioLogger: React.FC = () => {
               </button>
             </div>
             
-            {/* DURATION DISPLAY (when recording) */}
+            {/* DURATION DISPLAY */}
             {isRecording && (
               <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 px-4 py-2 rounded-xl">
                 <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
@@ -383,6 +563,41 @@ const AudioLogger: React.FC = () => {
               <RefreshCw size={20} className={isSyncing ? 'animate-spin' : ''} />
             </button>
           </div>
+        </div>
+
+        {/* STATUS INDICATORS */}
+        <div className="relative z-10 mb-6 space-y-2">
+          {retryQueue.length > 0 && (
+            <div className="flex items-center gap-2 bg-yellow-500/10 border border-yellow-500/20 px-4 py-2 rounded-xl">
+              <AlertCircle size={16} className="text-yellow-400" />
+              <span className="text-yellow-400 text-xs font-bold">
+                {retryQueue.length} recording{retryQueue.length > 1 ? 's' : ''} waiting to upload - will retry automatically
+              </span>
+            </div>
+          )}
+
+          {uploadStatus === 'uploading' && (
+            <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 px-4 py-2 rounded-xl">
+              <RefreshCw size={16} className="text-blue-400 animate-spin" />
+              <span className="text-blue-400 text-xs font-bold">Uploading...</span>
+            </div>
+          )}
+
+          {uploadStatus === 'success' && (
+            <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 px-4 py-2 rounded-xl">
+              <CheckCircle size={16} className="text-green-400" />
+              <span className="text-green-400 text-xs font-bold">Saved successfully!</span>
+            </div>
+          )}
+
+          {uploadStatus === 'error' && (
+            <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 px-4 py-2 rounded-xl">
+              <AlertCircle size={16} className="text-red-400" />
+              <span className="text-red-400 text-xs font-bold">
+                Upload failed - will retry automatically in 2 minutes
+              </span>
+            </div>
+          )}
         </div>
         
         {/* SEARCH BAR */}
@@ -424,53 +639,97 @@ const AudioLogger: React.FC = () => {
         </div>
         
         <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
-          {filteredLogs.length > 0 ? filteredLogs.map((log) => (
-            <div 
-              key={log.id}
-              onClick={() => setSelectedLog(log)}
-              className={`w-full text-left p-6 rounded-2xl border transition-all duration-300 cursor-pointer ${
-                selectedLog?.id === log.id 
-                  ? 'bg-blue-600/10 border-blue-500/50 shadow-lg' 
-                  : 'bg-slate-900/40 border-slate-800/40 hover:bg-slate-800/60 hover:border-slate-700'
-              }`}
-            >
-              <div className="flex justify-between items-start mb-4">
-                <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-lg ${selectedLog?.id === log.id ? 'bg-blue-600 text-white' : 'bg-slate-950 text-blue-400 shadow-inner'}`}>
-                    <Clock size={16} />
+          {filteredLogs.length > 0 ? filteredLogs.map((log) => {
+            const isExpanded = expandedLogs.has(log.id);
+            
+            return (
+              <div 
+                key={log.id}
+                className="w-full text-left p-6 rounded-2xl border bg-slate-900/40 border-slate-800/40 hover:bg-slate-800/60 hover:border-slate-700 transition-all duration-300"
+              >
+                {/* Header with timestamp and delete */}
+                <div className="flex justify-between items-start mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-slate-950 text-blue-400 shadow-inner">
+                      <Clock size={16} />
+                    </div>
+                    <span className="font-bold text-white text-sm">{log.timestamp}</span>
                   </div>
-                  <span className="font-bold text-white text-sm">{log.timestamp}</span>
+                  <div className="flex gap-2 items-center">
+                    <div className="flex gap-1">
+                      {log.tags.map(tag => (
+                        <span key={tag} className="text-[8px] font-black px-2 py-1 bg-slate-950 text-slate-500 border border-slate-800 rounded uppercase tracking-tighter">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                    <button
+                      onClick={() => deleteLog(log.id)}
+                      className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
+                      title="Delete conversation"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex gap-1">
-                  {log.tags.map(tag => (
-                    <span key={tag} className="text-[8px] font-black px-2 py-1 bg-slate-950 text-slate-500 border border-slate-800 rounded uppercase tracking-tighter">
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              </div>
-              
-              <div className="space-y-2 pl-4">
-                <div className="flex items-start gap-4">
-                  <span className="text-blue-500 mt-1 font-bold">•</span>
-                  <div className="flex-1">
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                      <span className="font-bold text-white">{log.customerName}</span>
-                      {log.vehicle && (
-                        <>
-                          <span className="text-slate-600 font-bold hidden sm:inline">•</span>
-                          <span className="text-slate-400 text-xs font-medium">{log.vehicle}</span>
-                        </>
+                
+                {/* Summary bullet */}
+                <div className="pl-4">
+                  <div className="flex items-start gap-4">
+                    <span className="text-blue-500 mt-1 font-bold">•</span>
+                    <div className="flex-1">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                        <span className="font-bold text-white">{log.customerName}</span>
+                        {log.vehicle && (
+                          <>
+                            <span className="text-slate-600 font-bold hidden sm:inline">•</span>
+                            <span className="text-slate-400 text-xs font-medium">{log.vehicle}</span>
+                          </>
+                        )}
+                      </div>
+                      
+                      {/* Summary */}
+                      <p className="text-slate-400 text-sm mt-2 font-medium">
+                        {log.transcriptPreview}
+                      </p>
+                      
+                      {/* Expand/Collapse button */}
+                      {log.fullTranscript && (
+                        <button
+                          onClick={() => toggleExpand(log.id)}
+                          className="mt-3 text-blue-400 text-xs font-bold hover:text-blue-300 transition-colors flex items-center gap-1"
+                        >
+                          {isExpanded ? (
+                            <>
+                              <ChevronUp size={14} />
+                              Hide Full Transcript
+                            </>
+                          ) : (
+                            <>
+                              <ChevronDown size={14} />
+                              View Full Transcript
+                            </>
+                          )}
+                        </button>
+                      )}
+                      
+                      {/* Full transcript (expanded) */}
+                      {isExpanded && log.fullTranscript && (
+                        <div className="mt-4 p-4 bg-slate-950/50 rounded-lg border border-slate-800">
+                          <div className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-2">
+                            Full Conversation
+                          </div>
+                          <p className="text-slate-300 text-sm leading-relaxed whitespace-pre-wrap">
+                            {log.fullTranscript}
+                          </p>
+                        </div>
                       )}
                     </div>
-                    <p className="text-slate-400 text-sm mt-2 line-clamp-3 font-medium leading-relaxed">
-                      {log.transcriptPreview}
-                    </p>
                   </div>
                 </div>
               </div>
-            </div>
-          )) : (
+            );
+          }) : (
             <div className="h-full flex flex-col items-center justify-center text-slate-700 py-20 text-center">
               <HardDrive size={64} className="mb-4 opacity-5" />
               <p className="text-xs font-black uppercase tracking-[0.3em] opacity-20">
