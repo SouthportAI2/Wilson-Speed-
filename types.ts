@@ -1,4 +1,3 @@
-
 export enum ViewState {
   DASHBOARD = 'DASHBOARD',
   EMAILS = 'EMAILS',
@@ -24,7 +23,8 @@ export interface AudioLog {
   customerName: string;
   vehicle: string;
   duration: string;
-  transcriptPreview: string;
+  transcriptPreview: string;  // Short summary for list view
+  fullTranscript?: string;    // Full conversation text (expandable)
   tags: string[];
   audioUrl?: string;
 }
