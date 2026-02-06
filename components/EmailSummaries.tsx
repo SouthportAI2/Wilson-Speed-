@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Mail, RefreshCw, AlertCircle, Clock, Zap, Activity, Phone, Wrench, Square, List } from 'lucide-react';
+import { Mail, RefreshCw, AlertCircle, Clock, Zap, Activity, Phone, Wrench, Square, List, Trash2 } from 'lucide-react';
 import { fetchEmailSummaries as fetchFromSupabase } from '../services/supabaseClient';
+import { getSupabaseClient } from '../services/supabaseClient';
 
 const AUTO_REFRESH_INTERVAL = 20 * 60 * 1000; // 20 minutes
 
@@ -10,6 +11,29 @@ const EmailSummaries: React.FC = () => {
   const [lastUpdated, setLastUpdated] = useState<string>('Not yet updated');
   const [error, setError] = useState<string | null>(null);
   const [selectedTab, setSelectedTab] = useState<string>('TODAY');
+
+  const deleteEmail = async (emailId: string) => {
+    if (!confirm('Delete this email summary? This cannot be undone.')) {
+      return;
+    }
+
+    const supabase = getSupabaseClient();
+    
+    // Remove from UI immediately
+    setEmails(prev => prev.filter(email => email.id !== emailId));
+    
+    // Remove from cloud
+    if (supabase) {
+      try {
+        await supabase
+          .from('email_summaries')
+          .delete()
+          .eq('id', emailId);
+      } catch (err) {
+        console.error('Failed to delete from cloud:', err);
+      }
+    }
+  };
 
   const fetchEmails = useCallback(async (isAuto = false) => {
     if (!isAuto) setLoading(true);
@@ -290,8 +314,20 @@ const EmailSummaries: React.FC = () => {
               {filteredEmails.map((email) => (
                 <div 
                   key={email.id} 
-                  className={`group relative rounded-2xl p-4 border transition-all duration-300 hover:shadow-xl cursor-pointer ${getCardBorderColor(email.urgency_level)}`}
+                  className={`group relative rounded-2xl p-4 border transition-all duration-300 hover:shadow-xl ${getCardBorderColor(email.urgency_level)}`}
                 >
+                  {/* Delete button - top right corner */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteEmail(email.id);
+                    }}
+                    className="absolute top-3 right-3 p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all z-10"
+                    title="Delete email summary"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+
                   <div className="flex flex-wrap items-center gap-2 mb-3">
                     <span className={`text-[9px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider ${email.urgency_level === 'high' ? 'bg-red-500/20 text-red-400' : email.urgency_level === 'medium' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-slate-500/20 text-slate-400'}`}>
                       {email.urgency_level.toUpperCase()} PRIORITY
@@ -333,8 +369,6 @@ const EmailSummaries: React.FC = () => {
                   <p className="text-slate-400 text-sm leading-relaxed font-medium mb-3 bg-slate-900/30 p-3 rounded-xl border border-slate-800/30">
                     {cleanSummary(email.summary)}
                   </p>
-
-            
                 </div>
               ))}
             </div>
