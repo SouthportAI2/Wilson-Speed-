@@ -312,23 +312,23 @@ const EmailSummaries: React.FC = () => {
             <div className="space-y-3">
               <h4 className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Detailed View</h4>
               {filteredEmails.map((email) => (
-                <div 
-                  key={email.id} 
-                  className={`group relative rounded-2xl p-4 border transition-all duration-300 hover:shadow-xl ${getCardBorderColor(email.urgency_level)}`}
-                >
-                  {/* Delete button - top right corner */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteEmail(email.id);
-                    }}
-                    className="absolute top-3 right-3 p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all z-10"
-                    title="Delete email summary"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+               <div 
+  key={email.id} 
+  className={`group relative rounded-2xl p-4 pr-12 border transition-all duration-300 hover:shadow-xl ${getCardBorderColor(email.urgency_level)}`}
+>
+  {/* Delete button - top right corner */}
+  <button
+    onClick={(e) => {
+      e.stopPropagation();
+      deleteEmail(email.id);
+    }}
+    className="absolute top-2 right-2 p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all z-10 opacity-0 group-hover:opacity-100"
+    title="Delete email summary"
+  >
+    <Trash2 size={14} />
+  </button>
 
-                  <div className="flex flex-wrap items-center gap-2 mb-3">
+  <div className="flex flex-wrap items-center gap-2 mb-3 pr-8">
                     <span className={`text-[9px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider ${email.urgency_level === 'high' ? 'bg-red-500/20 text-red-400' : email.urgency_level === 'medium' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-slate-500/20 text-slate-400'}`}>
                       {email.urgency_level.toUpperCase()} PRIORITY
                     </span>
