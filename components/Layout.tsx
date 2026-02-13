@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { 
   LayoutDashboard, 
@@ -10,9 +9,11 @@ import {
   Shield,
   Menu,
   X,
-  Activity
+  Activity,
+  LogOut
 } from 'lucide-react';
 import { ViewState } from '../types';
+import { useAuth } from '../hooks/useAuth';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -22,6 +23,7 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children, currentView, onNavigate }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { signOut } = useAuth();
 
   const navItems = [
     { id: ViewState.DASHBOARD, label: 'Dashboard', icon: LayoutDashboard },
@@ -68,7 +70,14 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onNavigate }) =>
           ))}
         </nav>
 
-        <div className="p-4 mt-auto border-t border-slate-800">
+        <div className="p-4 mt-auto border-t border-slate-800 space-y-3">
+          <button
+            onClick={signOut}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-all"
+          >
+            <LogOut size={18} />
+            <span className="font-semibold text-sm">Sign Out</span>
+          </button>
           <div className="bg-slate-900/50 rounded-xl p-4 border border-slate-800">
             <div className="text-[10px] text-slate-500 font-medium uppercase tracking-widest text-center">
               Infrastructure Core 1.0
@@ -103,6 +112,15 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onNavigate }) =>
               </button>
             ))}
           </nav>
+          <div className="mt-auto pt-6 border-t border-slate-800">
+            <button
+              onClick={signOut}
+              className="w-full flex items-center gap-4 px-6 py-5 rounded-2xl text-lg font-bold text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-all"
+            >
+              <LogOut size={24} />
+              Sign Out
+            </button>
+          </div>
         </div>
       )}
 
