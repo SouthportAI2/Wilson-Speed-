@@ -1,52 +1,46 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Mail, RefreshCw, AlertCircle, Clock, Zap, Activity, Phone, Wrench, Square, List, Trash2 } from 'lucide-react';
+import { Mail, RefreshCw, AlertCircle, Clock, Zap, Phone, Wrench, Square, List, Trash2, Download, Loader2 } from 'lucide-react';
 import { fetchEmailSummaries as fetchFromSupabase } from '../services/supabaseClient';
 import { getSupabaseClient } from '../services/supabaseClient';
+import { InfrastructureConfig } from '../types';
 
-const AUTO_REFRESH_INTERVAL = 20 * 60 * 1000; // 20 minutes
+const N8N_EMAIL_WEBHOOK = 'https://southportai.app.n8n.cloud/webhook/6fc56ccd-2900-4090-82a6-07bdf5662f32';
 
 const EmailSummaries: React.FC = () => {
   const [emails, setEmails] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [checking, setChecking] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string>('Not yet updated');
   const [error, setError] = useState<string | null>(null);
   const [selectedTab, setSelectedTab] = useState<string>('TODAY');
 
+  // ==================== DELETE ====================
   const deleteEmail = async (emailId: string) => {
-    if (!confirm('Delete this email summary? This cannot be undone.')) {
-      return;
-    }
+    if (!confirm('Delete this email summary? This cannot be undone.')) return;
 
     const supabase = getSupabaseClient();
-    
-    // Remove from UI immediately
     setEmails(prev => prev.filter(email => email.id !== emailId));
     
-    // Remove from cloud
     if (supabase) {
       try {
-        await supabase
-          .from('email_summaries')
-          .delete()
-          .eq('id', emailId);
+        await supabase.from('email_summaries').delete().eq('id', emailId);
       } catch (err) {
         console.error('Failed to delete from cloud:', err);
       }
     }
   };
 
-  const fetchEmails = useCallback(async (isAuto = false) => {
-    if (!isAuto) setLoading(true);
+  // ==================== FETCH FROM SUPABASE ====================
+  const fetchEmails = useCallback(async () => {
+    setLoading(true);
     setError(null);
     
     try {
-      console.log(`[INFRA] Fetching email summaries from Supabase...`);
-      
       const dbEmails = await fetchFromSupabase();
       
       const transformed = dbEmails.map((email) => {
-        let vehicles = [];
-        let actionItems = [];
+        let vehicles: any[] = [];
+        let actionItems: any[] = [];
         
         try {
           if (email.vehicles) {
@@ -98,7 +92,7 @@ const EmailSummaries: React.FC = () => {
         };
       });
       
-      // FIX: Robust deduplication based on sender, subject, and timestamp (within 1 minute)
+      // Deduplication
       const uniqueEmails: any[] = [];
       transformed.forEach((email) => {
         const duplicateIndex = uniqueEmails.findIndex(existing => 
@@ -110,14 +104,13 @@ const EmailSummaries: React.FC = () => {
         if (duplicateIndex === -1) {
           uniqueEmails.push(email);
         } else if (email.received_at > uniqueEmails[duplicateIndex].received_at) {
-          // Keep the newer entry if multiple instances of the same email exist
           uniqueEmails[duplicateIndex] = email;
         }
       });
       
-      const priorityOrder = { high: 0, medium: 1, low: 2 };
+      const priorityOrder: Record<string, number> = { high: 0, medium: 1, low: 2 };
       const sorted = uniqueEmails.sort((a, b) => {
-        const priorityDiff = priorityOrder[a.urgency_level] - priorityOrder[b.urgency_level];
+        const priorityDiff = (priorityOrder[a.urgency_level] ?? 2) - (priorityOrder[b.urgency_level] ?? 2);
         if (priorityDiff !== 0) return priorityDiff;
         return b.received_at.getTime() - a.received_at.getTime();
       });
@@ -126,27 +119,49 @@ const EmailSummaries: React.FC = () => {
       setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
     } catch (err) {
       console.error("Failed to fetch email summaries:", err);
-      if (!isAuto) setError("Could not load email summaries. Check Supabase configuration in Settings.");
+      setError("Could not load email summaries. Check Supabase configuration in Settings.");
     } finally {
       setLoading(false);
     }
   }, []);
 
+  // ==================== CHECK NEW EMAILS (n8n Webhook) ====================
+  const checkNewEmails = async () => {
+    setChecking(true);
+    setError(null);
+
+    try {
+      const response = await fetch(N8N_EMAIL_WEBHOOK, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trigger: 'manual', timestamp: new Date().toISOString() })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Webhook returned ${response.status}`);
+      }
+
+      // Wait a few seconds for n8n to process, then refresh from Supabase
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      await fetchEmails();
+    } catch (err: any) {
+      console.error("Check emails failed:", err);
+      setError("Failed to check for new emails. Verify n8n webhook is active.");
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  // ==================== INITIAL LOAD ====================
   useEffect(() => {
     fetchEmails();
-    const intervalId = setInterval(() => {
-      fetchEmails(true);
-    }, AUTO_REFRESH_INTERVAL);
-    return () => clearInterval(intervalId);
   }, [fetchEmails]);
 
+  // ==================== HELPERS ====================
   const getDateGroup = (date: Date) => {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    
     const emailDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    
-    // Calculate difference in days
     const diffTime = today.getTime() - emailDate.getTime();
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
     
@@ -187,22 +202,14 @@ const EmailSummaries: React.FC = () => {
 
   const cleanSummary = (summary: string) => {
     if (!summary) return '';
-    
     let result = summary.trim();
-    
-    // Remove exact prefix matches (most explicit approach possible)
     if (result.startsWith('=LOW:')) result = result.substring(5).trim();
     else if (result.startsWith('=MEDIUM:')) result = result.substring(8).trim();
     else if (result.startsWith('=HIGH:')) result = result.substring(6).trim();
     else if (result.startsWith('LOW:')) result = result.substring(4).trim();
     else if (result.startsWith('MEDIUM:')) result = result.substring(7).trim();
     else if (result.startsWith('HIGH:')) result = result.substring(5).trim();
-    
-    // Strip any remaining leading = characters
-    while (result.startsWith('=')) {
-      result = result.substring(1).trim();
-    }
-    
+    while (result.startsWith('=')) result = result.substring(1).trim();
     return result;
   };
 
@@ -210,20 +217,20 @@ const EmailSummaries: React.FC = () => {
     const vehicleText = email.vehicles && email.vehicles.length > 0 
       ? `${email.vehicles[0].year} ${email.vehicles[0].make} ${email.vehicles[0].model}` 
       : '';
-    
     const phoneText = email.phone ? ` - ${email.phone}` : '';
     const cleanedSummary = cleanSummary(email.summary);
-    
     return `${vehicleText ? vehicleText + ' - ' : ''}${cleanedSummary}${phoneText}`;
   };
 
   const tabs = ['TODAY', 'YESTERDAY', 'LAST WEEK', 'OLDER'];
 
+  // ==================== RENDER ====================
   return (
     <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 text-left">
       <div className="bg-slate-900/40 backdrop-blur-md border border-slate-800 rounded-3xl p-6 shadow-2xl relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/5 blur-[100px] -mr-32 -mt-32 pointer-events-none" />
         
+        {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8 border-b border-slate-800 pb-6 relative z-10">
           <div className="flex items-center gap-4">
             <div className="p-3 bg-blue-600 rounded-xl text-white shadow-xl shadow-blue-900/20">
@@ -231,29 +238,45 @@ const EmailSummaries: React.FC = () => {
             </div>
             <div>
               <h3 className="text-xl font-bold text-white tracking-tight">Email Summarizer</h3>
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1">
-                <p className="text-slate-400 text-xs flex items-center gap-2 font-medium">
-                  <Clock size={12} className="text-blue-500" /> 
-                  Last updated: <span className="text-slate-200">{lastUpdated}</span>
-                </p>
-                <div className="flex items-center gap-2 px-2 py-0.5 bg-blue-500/5 border border-blue-500/10 rounded-full">
-                  <Activity size={10} className="text-blue-500 animate-pulse" />
-                  <span className="text-[10px] font-black uppercase tracking-widest text-blue-400/70">Auto-Sync (20m)</span>
-                </div>
-              </div>
+              <p className="text-slate-400 text-xs flex items-center gap-2 font-medium mt-1">
+                <Clock size={12} className="text-blue-500" /> 
+                Last updated: <span className="text-slate-200">{lastUpdated}</span>
+              </p>
             </div>
           </div>
 
-          <button 
-            onClick={() => fetchEmails(false)}
-            disabled={loading}
-            className="group flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-all active:scale-95 shadow-xl shadow-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed font-bold text-xs relative z-20"
-          >
-            <RefreshCw size={16} className={loading ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'} />
-            {loading ? 'Refreshing...' : 'Refresh'}
-          </button>
+          {/* Action Buttons */}
+          <div className="flex items-center gap-3 relative z-20">
+            <button 
+              onClick={checkNewEmails}
+              disabled={checking || loading}
+              className="group flex items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition-all active:scale-95 shadow-xl shadow-emerald-900/20 disabled:opacity-50 disabled:cursor-not-allowed font-bold text-xs"
+            >
+              {checking ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  Checking...
+                </>
+              ) : (
+                <>
+                  <Download size={16} />
+                  Check New Emails
+                </>
+              )}
+            </button>
+
+            <button 
+              onClick={() => fetchEmails()}
+              disabled={loading || checking}
+              className="group flex items-center gap-2 px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-xl transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed font-bold text-xs"
+              title="Refresh from database"
+            >
+              <RefreshCw size={16} className={loading ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'} />
+            </button>
+          </div>
         </div>
 
+        {/* Tabs */}
         <div className="flex gap-2 mb-6 relative z-10">
           {tabs.map(tab => (
             <button
@@ -270,6 +293,7 @@ const EmailSummaries: React.FC = () => {
           ))}
         </div>
 
+        {/* Error */}
         {error && (
           <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-4 text-red-400 relative z-10">
             <AlertCircle size={18} />
@@ -277,6 +301,7 @@ const EmailSummaries: React.FC = () => {
           </div>
         )}
 
+        {/* Content */}
         {loading && emails.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-slate-500 gap-4 relative z-10">
             <div className="relative w-12 h-12">
@@ -287,6 +312,7 @@ const EmailSummaries: React.FC = () => {
           </div>
         ) : filteredEmails.length > 0 ? (
           <div className="relative z-10">
+            {/* Quick Summary */}
             <div className="bg-slate-950/60 border border-slate-700 rounded-2xl p-5 mb-6">
               <div className="flex items-center gap-3 mb-4">
                 <List size={20} className="text-blue-400" />
@@ -309,26 +335,26 @@ const EmailSummaries: React.FC = () => {
               </div>
             </div>
 
+            {/* Detailed View */}
             <div className="space-y-3">
               <h4 className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Detailed View</h4>
               {filteredEmails.map((email) => (
-               <div 
-  key={email.id} 
-  className={`group relative rounded-2xl p-4 pr-12 border transition-all duration-300 hover:shadow-xl ${getCardBorderColor(email.urgency_level)}`}
->
-  {/* Delete button - top right corner */}
-  <button
-    onClick={(e) => {
-      e.stopPropagation();
-      deleteEmail(email.id);
-    }}
-    className="absolute top-2 right-2 p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all z-10 opacity-0 group-hover:opacity-100"
-    title="Delete email summary"
-  >
-    <Trash2 size={14} />
-  </button>
+                <div 
+                  key={email.id} 
+                  className={`group relative rounded-2xl p-4 pr-12 border transition-all duration-300 hover:shadow-xl ${getCardBorderColor(email.urgency_level)}`}
+                >
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteEmail(email.id);
+                    }}
+                    className="absolute top-2 right-2 p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all z-10 opacity-0 group-hover:opacity-100"
+                    title="Delete email summary"
+                  >
+                    <Trash2 size={14} />
+                  </button>
 
-  <div className="flex flex-wrap items-center gap-2 mb-3 pr-8">
+                  <div className="flex flex-wrap items-center gap-2 mb-3 pr-8">
                     <span className={`text-[9px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider ${email.urgency_level === 'high' ? 'bg-red-500/20 text-red-400' : email.urgency_level === 'medium' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-slate-500/20 text-slate-400'}`}>
                       {email.urgency_level.toUpperCase()} PRIORITY
                     </span>
