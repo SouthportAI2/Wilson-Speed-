@@ -1,7 +1,7 @@
-
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.tsx';
+import { AuthProvider } from './hooks/useAuth';
 
 interface Props { children: ReactNode; }
 interface State { hasError: boolean; error: Error | null; }
@@ -11,20 +11,16 @@ class ErrorBoundary extends Component<Props, State> {
     super(props);
     this.state = { hasError: false, error: null };
   }
-
   static getDerivedStateFromError(error: Error) {
     return { hasError: true, error };
   }
-
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("Critical System Failure:", error, errorInfo);
   }
-
   handleReset = () => {
     localStorage.removeItem('southport_config');
     window.location.reload();
   };
-
   render() {
     if (this.state.hasError) {
       return (
@@ -56,12 +52,13 @@ class ErrorBoundary extends Component<Props, State> {
 
 const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error("Root target missing");
-
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
     <ErrorBoundary>
-      <App />
+      <AuthProvider>
+        <App />
+      </AuthProvider>
     </ErrorBoundary>
   </React.StrictMode>
 );
