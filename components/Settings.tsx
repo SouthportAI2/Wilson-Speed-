@@ -14,72 +14,67 @@ import {
 } from 'lucide-react';
 import { InfrastructureConfig } from '../types';
 
+// ─── Permanent defaults — never need to be re-entered after a redeploy ────────
+const DEFAULTS: InfrastructureConfig = {
+  n8nWebhookEmail:  '',
+  n8nWebhookAudio:  'https://southportai.app.n8n.cloud/webhook/audio-upload',
+  n8nWebhookSocial: '',
+  n8nWebhookReview: 'https://southportai.app.n8n.cloud/webhook/bf2832d8-ccf3-45df-91d3-f52612f98244',
+  supabaseUrl:      'https://mulvlitdcjdvetioljnn.supabase.co',
+  supabaseKey:      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im11bHZsaXRkY2pkdmV0aW9sam5uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQzMzc2MDAsImV4cCI6MjA3OTkxMzYwMH0.k-ha8n9iGaKTzHM-HucrdFEm-c4QKsXRoiZSMWzpXaU',
+  businessName:     '',
+  businessPhone:    '',
+  googleMapsLink:   '',
+};
+
+const STORAGE_KEY = 'southport_config';
+
 const Settings: React.FC = () => {
-  const [config, setConfig] = useState<InfrastructureConfig | any>({
-    n8nWebhookEmail: '',
-    n8nWebhookAudio: '',
-    n8nWebhookSocial: '',
-    n8nWebhookReview: '',
-    supabaseUrl: '',
-    supabaseKey: '',
-    businessName: '',
-    businessPhone: '',
-    googleMapsLink: '',
-  });
+  const [config, setConfig] = useState<InfrastructureConfig>(DEFAULTS);
   const [saveStatus, setSaveStatus] = useState<'IDLE' | 'SAVING' | 'SUCCESS'>('IDLE');
 
   useEffect(() => {
-    // Load from localStorage first
-    const saved = localStorage.getItem('southport_config');
-    let loadedConfig: any = {
-      n8nWebhookEmail: '',
-      n8nWebhookAudio: '',
-      n8nWebhookSocial: '',
-      n8nWebhookReview: '',
-      supabaseUrl: '',
-      supabaseKey: '',
-      businessName: '',
-      businessPhone: '',
-      googleMapsLink: '',
-    };
-
+    // Merge: DEFAULTS → env vars → localStorage (each layer wins over the previous)
+    const saved = localStorage.getItem(STORAGE_KEY);
+    let stored: Partial<InfrastructureConfig> = {};
     if (saved) {
-      try {
-        loadedConfig = { ...loadedConfig, ...JSON.parse(saved) };
-      } catch (e) {
-        console.error("Failed to parse config", e);
-      }
+      try { stored = JSON.parse(saved); } catch (e) { console.error('Failed to parse config', e); }
     }
 
-    // Use environment variables as defaults if localStorage is empty
     setConfig({
-      n8nWebhookEmail: loadedConfig.n8nWebhookEmail || (import.meta as any).env.VITE_N8N_WEBHOOK_EMAIL || '',
-      n8nWebhookAudio: loadedConfig.n8nWebhookAudio || (import.meta as any).env.VITE_N8N_WEBHOOK_AUDIO || '',
-      n8nWebhookSocial: loadedConfig.n8nWebhookSocial || (import.meta as any).env.VITE_N8N_WEBHOOK_SOCIAL || '',
-      n8nWebhookReview: loadedConfig.n8nWebhookReview || (import.meta as any).env.VITE_N8N_WEBHOOK_REVIEW || '',
-      supabaseUrl: loadedConfig.supabaseUrl || (import.meta as any).env.VITE_SUPABASE_URL || '',
-      supabaseKey: loadedConfig.supabaseKey || (import.meta as any).env.VITE_SUPABASE_KEY || '',
-      businessName: loadedConfig.businessName || (import.meta as any).env.VITE_BUSINESS_NAME || '',
-      businessPhone: loadedConfig.businessPhone || (import.meta as any).env.VITE_BUSINESS_PHONE || '',
-      googleMapsLink: loadedConfig.googleMapsLink || (import.meta as any).env.VITE_GOOGLE_MAPS_LINK || '',
+      n8nWebhookEmail:  stored.n8nWebhookEmail  || (import.meta as any).env.VITE_N8N_WEBHOOK_EMAIL  || DEFAULTS.n8nWebhookEmail,
+      n8nWebhookAudio:  stored.n8nWebhookAudio  || (import.meta as any).env.VITE_N8N_WEBHOOK_AUDIO  || DEFAULTS.n8nWebhookAudio,
+      n8nWebhookSocial: stored.n8nWebhookSocial || (import.meta as any).env.VITE_N8N_WEBHOOK_SOCIAL || DEFAULTS.n8nWebhookSocial,
+      n8nWebhookReview: stored.n8nWebhookReview || (import.meta as any).env.VITE_N8N_WEBHOOK_REVIEW || DEFAULTS.n8nWebhookReview,
+      supabaseUrl:      stored.supabaseUrl       || (import.meta as any).env.VITE_SUPABASE_URL       || DEFAULTS.supabaseUrl,
+      supabaseKey:      stored.supabaseKey       || (import.meta as any).env.VITE_SUPABASE_KEY       || DEFAULTS.supabaseKey,
+      businessName:     stored.businessName      || (import.meta as any).env.VITE_BUSINESS_NAME      || DEFAULTS.businessName,
+      businessPhone:    stored.businessPhone     || (import.meta as any).env.VITE_BUSINESS_PHONE     || DEFAULTS.businessPhone,
+      googleMapsLink:   stored.googleMapsLink    || (import.meta as any).env.VITE_GOOGLE_MAPS_LINK   || DEFAULTS.googleMapsLink,
     });
+  }, []);
+
+  // Auto-save DEFAULTS into localStorage on first load if nothing is stored yet,
+  // so every other part of the app can read from localStorage immediately.
+  useEffect(() => {
+    const existing = localStorage.getItem(STORAGE_KEY);
+    if (!existing) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULTS));
+    }
   }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setConfig({ ...config, [name] : value });
+    setConfig(prev => ({ ...prev, [name]: value }));
     if (saveStatus === 'SUCCESS') setSaveStatus('IDLE');
   };
 
   const handleSave = () => {
     setSaveStatus('SAVING');
-    localStorage.setItem('southport_config', JSON.stringify(config));
-    
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
     setTimeout(() => {
       setSaveStatus('SUCCESS');
-      setTimeout(() => {
-        window.location.reload();
-      }, 800);
+      setTimeout(() => window.location.reload(), 800);
     }, 400);
   };
 
