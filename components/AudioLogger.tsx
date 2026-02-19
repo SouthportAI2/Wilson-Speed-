@@ -569,7 +569,13 @@ const AudioLogger: React.FC = () => {
   const startRecording = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        audio: {
+          echoCancellation: false,  // was causing pumping/choppiness
+          noiseSuppression: false,  // was swallowing soft sounds and names
+          autoGainControl: false,   // was aggressively cutting volume at sentence starts
+          sampleRate: 44100,        // CD quality
+          channelCount: 1,          // mono is cleaner for voice transcription
+        },
       });
       streamRef.current = stream;
       const audioContext = new AudioContext();
