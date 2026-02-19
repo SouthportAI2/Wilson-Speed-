@@ -26,7 +26,7 @@ export interface AudioLog {
   transcriptPreview: string;  // Short summary for list view
   fullTranscript?: string;    // Full conversation text (expandable)
   tags: string[];
-  audioUrl?: string;
+  audioUrl?: string | null;   // Supabase storage URL for audio playback
 }
 
 export interface InfrastructureConfig {
