@@ -10,6 +10,8 @@ import { AudioLog } from '../types';
 const CONFIG_KEY = 'southport_config';
 const LOCAL_LOGS_KEY = 'southport_audio_cache_v3';
 const SAVED_LOGS_KEY = 'southport_saved_chats';
+// Persistent map of { isoTimestamp -> audioUrl } — survives n8n overwriting rows
+const AUDIO_URL_MAP_KEY = 'southport_audio_url_map';
 const SILENCE_THRESHOLD = 10;
 const SILENCE_DURATION = 10000;
 const MAX_RECORDING_DURATION = 300000;
@@ -358,22 +360,35 @@ const AudioLogger: React.FC = () => {
           .limit(100);
 
         if (!error && data) {
-          // Collect any rows that are missing audio_url so we can patch them back
-          const rowsNeedingUrlFix: string[] = [];
+          // URL map keyed by "YYYY-MM-DDTHH:MM" — written when we upload
+          const urlMap: Record<string, string> = JSON.parse(localStorage.getItem(AUDIO_URL_MAP_KEY) || '{}');
+          const rowsToRepair: Array<{ id: string; url: string }> = [];
 
           cloudLogs = data.map(item => {
             let audioUrl: string | null = item.audio_url || null;
 
-            // If n8n wiped the audio_url on its transcript update, reconstruct it
-            // from the known storage path: audio-files/{id}.webm
             if (!audioUrl) {
-              const { data: { publicUrl } } = supabase.storage
+              // Strategy 1: match by ID — works when n8n UPDATEs our original row
+              const idBasedUrl = supabase.storage
                 .from('audio-files')
-                .getPublicUrl(`${item.id}.webm`);
+                .getPublicUrl(`${item.id}.webm`).data.publicUrl;
 
-              if (publicUrl) {
-                audioUrl = publicUrl;
-                rowsNeedingUrlFix.push(item.id.toString());
+              // Strategy 2: match by timestamp — works when n8n INSERTs a new row
+              // with a different UUID, overwriting ours. We stored the URL keyed
+              // by the minute the recording was uploaded (YYYY-MM-DDTHH:MM).
+              const rowMinute = new Date(item.created_at).toISOString().slice(0, 16);
+              // Also check ±1 minute to account for clock drift / processing delay
+              const prevMinute = new Date(new Date(item.created_at).getTime() - 60000)
+                .toISOString().slice(0, 16);
+              const nextMinute = new Date(new Date(item.created_at).getTime() + 60000)
+                .toISOString().slice(0, 16);
+
+              const mappedUrl = urlMap[rowMinute] || urlMap[prevMinute] || urlMap[nextMinute] || null;
+
+              audioUrl = mappedUrl || idBasedUrl;
+
+              if (audioUrl) {
+                rowsToRepair.push({ id: item.id.toString(), url: audioUrl });
               }
             }
 
@@ -392,22 +407,19 @@ const AudioLogger: React.FC = () => {
             };
           });
 
-          // Silently patch any rows whose audio_url was missing — fixes them permanently
-          // so n8n can never wipe them again once restored
-          if (rowsNeedingUrlFix.length > 0) {
-            rowsNeedingUrlFix.forEach(async (id) => {
-              const { data: { publicUrl } } = supabase.storage
-                .from('audio-files')
-                .getPublicUrl(`${id}.webm`);
-              if (publicUrl) {
-                await supabase
-                  .from('audio_logs')
-                  .update({ audio_url: publicUrl })
-                  .eq('id', id);
-                console.log(`Restored missing audio_url for log ${id}`);
-              }
-            });
-          }
+          // Silently write audio_url back into every row that was missing it
+          // so it's fixed in DB permanently for next load
+          rowsToRepair.forEach(async ({ id, url }) => {
+            try {
+              await supabase
+                .from('audio_logs')
+                .update({ audio_url: url })
+                .eq('id', id);
+              console.log(`Repaired audio_url for log ${id}`);
+            } catch (e) {
+              console.warn(`Could not repair audio_url for ${id}:`, e);
+            }
+          });
         }
       } catch (err) {
         console.warn('Cloud connection limited:', err);
@@ -512,6 +524,12 @@ const AudioLogger: React.FC = () => {
             saved: false,
           });
           setLogs(prev => prev.map(log => log.id === tempId ? { ...log, audioUrl } : log));
+
+          // Persist url->timestamp mapping so fetchLogs can recover it even if n8n rewrites the row
+          const urlMap = JSON.parse(localStorage.getItem(AUDIO_URL_MAP_KEY) || '{}');
+          urlMap[new Date().toISOString().slice(0, 16)] = audioUrl; // key = "YYYY-MM-DDTHH:MM"
+          localStorage.setItem(AUDIO_URL_MAP_KEY, JSON.stringify(urlMap));
+
           uploadSuccess = true;
         }
       }
