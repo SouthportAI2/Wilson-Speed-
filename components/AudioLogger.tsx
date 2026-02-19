@@ -560,18 +560,30 @@ const AudioLogger: React.FC = () => {
       analyser.fftSize = 512;
       audioContextRef.current = audioContext;
       analyserRef.current = analyser;
-      const recorder = new MediaRecorder(stream);
+      // Prefer Opus — cleaner voice quality, smaller files, no gaps
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm')
+          ? 'audio/webm'
+          : 'audio/ogg;codecs=opus';
+
+      const recorder = new MediaRecorder(stream, {
+        mimeType,
+        audioBitsPerSecond: 128000,
+      });
       mediaRecorderRef.current = recorder;
       chunksRef.current = [];
+
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       recorder.onstop = async () => {
         const recordingDuration = Date.now() - (recordingStartTimeRef.current || Date.now());
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        const blob = new Blob(chunksRef.current, { type: mimeType });
         await uploadAndProcess(blob, recordingDuration);
         if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
         if (audioContextRef.current) { audioContextRef.current.close(); audioContextRef.current = null; }
       };
-      recorder.start();
+      // 250ms timeslice = continuous chunk streaming, eliminates choppiness
+      recorder.start(250);
       recordingStartTimeRef.current = Date.now();
       silenceStartRef.current = null;
       setIsRecording(true);
