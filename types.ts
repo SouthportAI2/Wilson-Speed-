@@ -27,6 +27,8 @@ export interface AudioLog {
   fullTranscript?: string;    // Full conversation text (expandable)
   tags: string[];
   audioUrl?: string | null;   // Supabase storage URL for audio playback
+  saved?: boolean;            // Permanently saved as liability record
+  savedAt?: string;           // ISO timestamp of when it was saved
 }
 
 export interface InfrastructureConfig {
