@@ -358,19 +358,56 @@ const AudioLogger: React.FC = () => {
           .limit(100);
 
         if (!error && data) {
-          cloudLogs = data.map(item => ({
-            id: item.id.toString(),
-            timestamp: new Date(item.created_at).toLocaleString(),
-            customerName: item.customer_name || 'Customer',
-            vehicle: item.vehicle || '',
-            duration: item.duration || 'N/A',
-            transcriptPreview: item.segment_summary || 'Processing...',
-            fullTranscript: item.transcript || '',
-            tags: item.tags || ['CLOUD'],
-            audioUrl: item.audio_url || null,
-            saved: item.saved || false,
-            savedAt: item.saved_at || undefined,
-          }));
+          // Collect any rows that are missing audio_url so we can patch them back
+          const rowsNeedingUrlFix: string[] = [];
+
+          cloudLogs = data.map(item => {
+            let audioUrl: string | null = item.audio_url || null;
+
+            // If n8n wiped the audio_url on its transcript update, reconstruct it
+            // from the known storage path: audio-files/{id}.webm
+            if (!audioUrl) {
+              const { data: { publicUrl } } = supabase.storage
+                .from('audio-files')
+                .getPublicUrl(`${item.id}.webm`);
+
+              if (publicUrl) {
+                audioUrl = publicUrl;
+                rowsNeedingUrlFix.push(item.id.toString());
+              }
+            }
+
+            return {
+              id: item.id.toString(),
+              timestamp: new Date(item.created_at).toLocaleString(),
+              customerName: item.customer_name || 'Customer',
+              vehicle: item.vehicle || '',
+              duration: item.duration || 'N/A',
+              transcriptPreview: item.segment_summary || 'Processing...',
+              fullTranscript: item.transcript || '',
+              tags: item.tags || ['CLOUD'],
+              audioUrl,
+              saved: item.saved || false,
+              savedAt: item.saved_at || undefined,
+            };
+          });
+
+          // Silently patch any rows whose audio_url was missing — fixes them permanently
+          // so n8n can never wipe them again once restored
+          if (rowsNeedingUrlFix.length > 0) {
+            rowsNeedingUrlFix.forEach(async (id) => {
+              const { data: { publicUrl } } = supabase.storage
+                .from('audio-files')
+                .getPublicUrl(`${id}.webm`);
+              if (publicUrl) {
+                await supabase
+                  .from('audio_logs')
+                  .update({ audio_url: publicUrl })
+                  .eq('id', id);
+                console.log(`Restored missing audio_url for log ${id}`);
+              }
+            });
+          }
         }
       } catch (err) {
         console.warn('Cloud connection limited:', err);
